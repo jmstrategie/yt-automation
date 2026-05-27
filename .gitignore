@@ -1,0 +1,21 @@
+# secrets — NEVER commit
+.env
+secrets/
+*.json
+*.pkl
+*.pickle
+client_secrets*.json
+
+# large output files
+output/
+temp/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
