@@ -18,6 +18,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from dotenv import load_dotenv
+load_dotenv()
 from config import CHANNEL_A, CHANNEL_B, ALL_CHANNELS, OUTPUT_DIR, TEMP_DIR, SECRETS_DIR
 from modules.trends import get_topics_for_channel
 from modules.script import generate_script, generate_series_scripts

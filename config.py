@@ -38,8 +38,8 @@ class ChannelConfig:
     max_video_length_sec: int
 
 CHANNEL_A = ChannelConfig(
-    name                = "FinanceAndAI",
-    channel_id          = "",        # fill after first OAuth run
+    name                = "WealthWhale",
+    channel_id          = "UCoPwmRtesRrED9WKTtFU1Cg",
     secrets_file        = "secrets/client_secrets_channelA.json",
     token_file          = "secrets/token_channelA.json",
     niche               = "personal_finance_ai",
