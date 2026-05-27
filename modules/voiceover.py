@@ -45,23 +45,24 @@ def generate_voiceover_elevenlabs(
     output_path: str,
 ) -> str:
     """Generate MP3 using ElevenLabs API. Requires ELEVENLABS_API_KEY."""
-    try:
-        from elevenlabs import ElevenLabs, VoiceSettings
-    except ImportError:
-        raise ImportError("pip install elevenlabs")
+    from elevenlabs import ElevenLabs
+    from elevenlabs.types import VoiceSettings
 
     print(f"  [voice] ElevenLabs → {Path(output_path).name}")
     client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
 
-    audio = client.generate(
+    audio_generator = client.text_to_speech.convert(
+        voice_id=voice_id,
         text=text,
-        voice=voice_id,
-        voice_settings=VoiceSettings(stability=0.5, similarity_boost=0.75),
-        model="eleven_turbo_v2",
+        model_id="eleven_turbo_v2",
+        voice_settings=VoiceSettings(
+            stability=0.5,
+            similarity_boost=0.75,
+        ),
     )
 
     with open(output_path, "wb") as f:
-        for chunk in audio:
+        for chunk in audio_generator:
             f.write(chunk)
 
     size_kb = os.path.getsize(output_path) // 1024
