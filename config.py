@@ -59,7 +59,7 @@ CHANNEL_A = ChannelConfig(
         "https://www.reddit.com/r/artificial/.rss",
     ],
     voice               = "en-US-GuyNeural",        # free edge-tts
-    elevenlabs_voice_id = "",                        # add if upgrading
+    elevenlabs_voice_id = "ZT9u07TYPVl83ejeLakq",                        # add if upgrading
     thumbnail_style     = "finance",
     primary_color       = "#1DB954",                 # green
     upload_schedule     = "0 14 * * 1,3,5",         # Mon/Wed/Fri 2pm UTC
