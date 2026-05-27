@@ -95,7 +95,14 @@ def search_pexels_videos(query: str, per_page: int = 5) -> List[str]:
 
     url = "https://api.pexels.com/videos/search"
     headers = {"Authorization": PEXELS_API_KEY}
-    params = {"query": query, "per_page": per_page, "orientation": "landscape", "size": "large"}
+    params = {
+        "query": query,
+        "per_page": per_page,
+        "orientation": "landscape",
+        "size": "large",
+        "min_duration": 5,
+        "max_duration": 30,
+    }
 
     try:
         r = requests.get(url, headers=headers, params=params, timeout=15)
@@ -103,11 +110,13 @@ def search_pexels_videos(query: str, per_page: int = 5) -> List[str]:
         videos = r.json().get("videos", [])
         links = []
         for v in videos:
-            # prefer Full HD (1920x1080), fallback to HD (1280x720)
+            duration = v.get("duration", 0)
+            if duration < 5:
+                continue
             files = sorted(v.get("video_files", []), key=lambda f: f.get("width", 0), reverse=True)
-            best = next((f for f in files if f.get("width", 0) >= 1920), None)
+            best = next((f for f in files if f.get("width", 0) >= 1920 and f.get("file_type") == "video/mp4"), None)
             if not best:
-                best = next((f for f in files if f.get("width", 0) >= 1280), None)
+                best = next((f for f in files if f.get("width", 0) >= 1280 and f.get("file_type") == "video/mp4"), None)
             if best:
                 links.append(best["link"])
         return links
@@ -156,7 +165,21 @@ def download_clip(url: str, output_path: str, timeout: int = 60) -> Optional[str
             for chunk in r.iter_content(chunk_size=8192):
                 f.write(chunk)
         size_mb = os.path.getsize(output_path) / (1024 * 1024)
-        print(f"  [broll] Downloaded {Path(output_path).name} ({size_mb:.1f} MB)")
+
+        # verify it's a real video with sufficient duration
+        import subprocess
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", output_path],
+            capture_output=True, text=True,
+        )
+        duration = float(result.stdout.strip()) if result.returncode == 0 else 0
+        if duration < 4:
+            print(f"  [broll] Skipping {Path(output_path).name} — too short ({duration:.1f}s)")
+            os.remove(output_path)
+            return None
+
+        print(f"  [broll] Downloaded {Path(output_path).name} ({size_mb:.1f} MB, {duration:.1f}s)")
         return output_path
     except Exception as e:
         print(f"  [broll] Download error: {e}")
