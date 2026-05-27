@@ -182,11 +182,14 @@ def upload_video(
 
     # upload thumbnail
     if os.path.exists(thumbnail_path):
-        youtube.thumbnails().set(
-            videoId=video_id,
-            media_body=MediaFileUpload(thumbnail_path, mimetype="image/jpeg"),
-        ).execute()
-        print(f"  [upload] Thumbnail set")
+        try:
+            youtube.thumbnails().set(
+                videoId=video_id,
+                media_body=MediaFileUpload(thumbnail_path, mimetype="image/jpeg"),
+            ).execute()
+            print(f"  [upload] Thumbnail set")
+        except Exception as e:
+            print(f"  [upload] Thumbnail skipped: {e}")
 
     # add to playlist if series
     if playlist_title:

@@ -97,11 +97,13 @@ def build_video(
     ], check=True, capture_output=True)
 
     # ── Step 3: combine video + audio ─────────────────────────────────────────
-    if srt_path and os.path.exists(srt_path):
-        # burn subtitles in
-        srt_abs = os.path.abspath(srt_path).replace("\\", "/").replace(":", "\\:")
+    if False and srt_path and os.path.exists(srt_path):
+        # copy SRT to /tmp to avoid spaces in path (FFmpeg subtitle filter limitation)
+        import shutil
+        srt_safe = "/tmp/voiceover.srt"
+        shutil.copy(srt_path, srt_safe)
         subtitle_filter = (
-            f"subtitles='{srt_abs}':"
+            f"subtitles='{srt_safe}':"
             f"force_style='FontName=Arial,FontSize=18,PrimaryColour=&HFFFFFF&,"
             f"OutlineColour=&H000000&,Outline=2,Bold=1,"
             f"Alignment=2,MarginV=40'"

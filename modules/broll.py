@@ -1,16 +1,90 @@
 """
 modules/broll.py
-Downloads free stock video clips from Pexels and Pixabay
-based on keywords extracted from the video script.
+Downloads free stock video clips from Pexels and Pixabay.
+Uses Claude to extract cinematic, meaningful B-roll search queries from the script.
 """
 
 import os
-import re
+import json
 import requests
 from typing import List, Optional
 from pathlib import Path
 
 from config import PEXELS_API_KEY, PIXABAY_API_KEY
+
+
+def extract_broll_queries(script_text: str, niche: str, n: int = 6) -> List[str]:
+    """
+    Use Claude to extract meaningful visual B-roll search queries from the script.
+    Falls back to niche defaults if Claude call fails.
+    """
+    from config import ANTHROPIC_API_KEY, CLAUDE_MODEL
+    import anthropic
+
+    # niche-specific fallbacks if Claude fails
+    fallbacks = {
+        "personal_finance_ai": [
+            "stock market trading screen", "person using smartphone app",
+            "money and coins close up", "financial planning desk",
+            "AI technology data visualization", "Wall Street building exterior",
+            "person reviewing investment portfolio", "credit card payment",
+            "laptop with financial charts", "businessman walking city",
+        ],
+        "food_recipes": [
+            "chef cooking in kitchen", "fresh vegetables cutting board",
+            "meal prep containers", "food ingredients flat lay",
+            "cooking pan on stove", "healthy meal plating",
+            "grocery shopping produce", "food close up appetizing",
+            "kitchen utensils countertop", "family eating dinner table",
+        ],
+    }
+
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+        prompt = f"""You are a professional video editor choosing B-roll footage for a YouTube video.
+
+Read this script and return exactly {n} specific visual search queries to find relevant stock footage on Pexels.
+
+SCRIPT:
+{script_text[:2000]}
+
+NICHE: {niche}
+
+RULES:
+- Each query must be 2-4 words, highly visual and concrete
+- Think like a cinematographer — what would you actually film to illustrate each section?
+- NO abstract words, NO single words, NO pronouns, NO filler words
+- Queries must work as stock footage search terms
+- Vary the queries — cover different parts of the script, don't repeat concepts
+- Prefer cinematic, professional-looking footage descriptions
+
+GOOD examples: "stock market trading screen", "person checking investment app", "AI data visualization", "money coins stacking", "financial advisor meeting", "cryptocurrency price chart"
+BAD examples: "An", "But", "money", "Robinhood", "here is why", "trading"
+
+Return ONLY a JSON array of {n} strings, no other text, no markdown:
+["query 1", "query 2", "query 3", "query 4", "query 5", "query 6"]"""
+
+        response = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=300,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        raw = response.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        raw = raw.strip()
+
+        queries = json.loads(raw)
+        print(f"  [broll] Claude queries: {queries}")
+        return queries[:n]
+
+    except Exception as e:
+        print(f"  [broll] Claude query error: {e} — using fallbacks")
+        return fallbacks.get(niche, fallbacks["personal_finance_ai"])[:n]
 
 
 def search_pexels_videos(query: str, per_page: int = 5) -> List[str]:
@@ -21,7 +95,7 @@ def search_pexels_videos(query: str, per_page: int = 5) -> List[str]:
 
     url = "https://api.pexels.com/videos/search"
     headers = {"Authorization": PEXELS_API_KEY}
-    params = {"query": query, "per_page": per_page, "orientation": "landscape"}
+    params = {"query": query, "per_page": per_page, "orientation": "landscape", "size": "large"}
 
     try:
         r = requests.get(url, headers=headers, params=params, timeout=15)
@@ -29,11 +103,13 @@ def search_pexels_videos(query: str, per_page: int = 5) -> List[str]:
         videos = r.json().get("videos", [])
         links = []
         for v in videos:
-            # prefer HD (1280x720) or Full HD
-            files = sorted(v.get("video_files", []), key=lambda f: f.get("width", 0))
-            hd = next((f for f in files if f.get("width", 0) >= 1280), None)
-            if hd:
-                links.append(hd["link"])
+            # prefer Full HD (1920x1080), fallback to HD (1280x720)
+            files = sorted(v.get("video_files", []), key=lambda f: f.get("width", 0), reverse=True)
+            best = next((f for f in files if f.get("width", 0) >= 1920), None)
+            if not best:
+                best = next((f for f in files if f.get("width", 0) >= 1280), None)
+            if best:
+                links.append(best["link"])
         return links
     except Exception as e:
         print(f"  [broll] Pexels error: {e}")
@@ -52,6 +128,7 @@ def search_pixabay_videos(query: str, per_page: int = 5) -> List[str]:
         "q": query,
         "per_page": per_page,
         "video_type": "film",
+        "order": "popular",
     }
 
     try:
@@ -86,54 +163,20 @@ def download_clip(url: str, output_path: str, timeout: int = 60) -> Optional[str
         return None
 
 
-def extract_broll_queries(script_text: str, niche: str, n: int = 6) -> List[str]:
-    """
-    Extract B-roll search queries from a script.
-    Uses simple keyword extraction — replace with Claude call for higher quality.
-    """
-    # niche-specific fallback queries
-    fallbacks = {
-        "personal_finance_ai": [
-            "money", "investment", "technology", "office", "city",
-            "computer", "stock market", "financial planning"
-        ],
-        "food_recipes": [
-            "cooking", "food", "kitchen", "vegetables", "meal prep",
-            "restaurant", "ingredients", "chef"
-        ],
-    }
-
-    # extract capitalized multi-word phrases and nouns from script
-    words = re.findall(r"\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\b", script_text)
-    common_stopwords = {"The", "This", "That", "When", "What", "How", "Why"}
-    queries = [w for w in words if w not in common_stopwords]
-
-    # deduplicate and mix with fallbacks
-    seen = set()
-    result = []
-    for q in queries + fallbacks.get(niche, []):
-        if q.lower() not in seen:
-            seen.add(q.lower())
-            result.append(q)
-        if len(result) >= n:
-            break
-
-    return result
-
-
 def fetch_broll_clips(
     script_text: str,
     niche: str,
     output_dir: str,
-    num_clips: int = 8,
+    num_clips: int = 10,
 ) -> List[str]:
     """
-    Main entry: search + download B-roll clips for a video.
+    Main entry: Claude query generation → Pexels search → download clips.
     Returns list of local file paths.
     """
     os.makedirs(output_dir, exist_ok=True)
+
+    # get cinematic queries from Claude
     queries = extract_broll_queries(script_text, niche, n=num_clips)
-    print(f"  [broll] Queries: {queries[:4]}...")
 
     clip_paths = []
     clip_index = 0
@@ -142,10 +185,14 @@ def fetch_broll_clips(
         if len(clip_paths) >= num_clips:
             break
 
-        # try Pexels first, fallback to Pixabay
+        # try Pexels first (higher quality), fallback to Pixabay
         urls = search_pexels_videos(query, per_page=2)
         if not urls:
             urls = search_pixabay_videos(query, per_page=2)
+
+        if not urls:
+            print(f"  [broll] No results for '{query}' — skipping")
+            continue
 
         for url in urls:
             if len(clip_paths) >= num_clips:
@@ -161,10 +208,14 @@ def fetch_broll_clips(
 
 
 if __name__ == "__main__":
+    from dotenv import load_dotenv
+    load_dotenv()
     clips = fetch_broll_clips(
-        "investing money stock market financial freedom",
+        "Robinhood just launched AI trading bots that buy and sell stocks automatically. "
+        "78% of retail traders using algorithmic strategies lose money. "
+        "We explain what's really happening with AI investing apps.",
         "personal_finance_ai",
         "temp/broll_test",
-        num_clips=3,
+        num_clips=6,
     )
     print(clips)
