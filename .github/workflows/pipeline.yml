@@ -60,7 +60,7 @@ jobs:
         run: |
           mkdir -p secrets
           printf '%s' "$CLIENT_SECRETS_A" > secrets/client_secrets_channelA.json
-          printf '%s' "$TOKEN_A" > secrets/token_channelA.json
+          echo "$TOKEN_A" | base64 --decode > secrets/token_channelA.json
 
       - name: Run pipeline
         env:
