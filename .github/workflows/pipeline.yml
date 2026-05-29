@@ -54,10 +54,13 @@ jobs:
           curl -sL "https://github.com/googlefonts/roboto/raw/main/src/hinted/Roboto-Regular.ttf" -o assets/fonts/Roboto-Regular.ttf
 
       - name: Write secrets
+        env:
+          CLIENT_SECRETS_A: ${{ secrets.CLIENT_SECRETS_CHANNEL_A }}
+          TOKEN_A: ${{ secrets.TOKEN_CHANNEL_A }}
         run: |
           mkdir -p secrets
-          echo '${{ secrets.CLIENT_SECRETS_CHANNEL_A }}' > secrets/client_secrets_channelA.json
-          echo '${{ secrets.TOKEN_CHANNEL_A }}' > secrets/token_channelA.json
+          printf '%s' "$CLIENT_SECRETS_A" > secrets/client_secrets_channelA.json
+          printf '%s' "$TOKEN_A" > secrets/token_channelA.json
 
       - name: Run pipeline
         env:
