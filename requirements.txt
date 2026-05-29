@@ -7,7 +7,6 @@ feedparser>=6.0.10
 pytrends>=4.9.2
 Pillow>=10.0.0
 requests>=2.31.0
-# optional — uncomment to use ElevenLabs premium voices
-# elevenlabs>=1.0.0
-# optional — uncomment to use DALL-E thumbnails
-# openai>=1.0.0
+python-dotenv>=1.0.0
+elevenlabs>=1.0.0
+openai>=1.0.0
