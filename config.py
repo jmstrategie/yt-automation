@@ -71,33 +71,37 @@ CHANNEL_A = ChannelConfig(
 )
 
 CHANNEL_B = ChannelConfig(
-    name                = "QuickBitesKitchen",
-    channel_id          = "",
+    name                = "ChuckysUntoldStories",
+    channel_id          = "UCffQwNxThKwuaBkV16j6b3g",
     secrets_file        = "secrets/client_secrets_channelB.json",
     token_file          = "secrets/token_channelB.json",
-    niche               = "food_recipes",
+    niche               = "dark_history",
     topics              = [
-        "easy dinner recipes", "5 ingredient meals", "meal prep",
-        "high protein recipes", "budget meals", "keto recipes",
-        "air fryer recipes", "30 minute dinners", "healthy snacks",
-        "one pan meals", "pasta recipes", "chicken recipes",
+        "dark history", "ancient mysteries", "lost civilizations",
+        "historical cover-ups", "forgotten empires", "ancient secrets",
+        "untold history", "historical mysteries", "ancient discoveries",
+        "dark secrets history", "hidden history", "conspiracy history",
+        "ancient civilizations", "historical dark facts", "unsolved mysteries",
     ],
     rss_feeds           = [
-        "https://www.allrecipes.com/feeds/recipes.rss",
-        "https://www.reddit.com/r/MealPrepSunday/.rss",
-        "https://www.reddit.com/r/EatCheapAndHealthy/.rss",
-        "https://www.seriouseats.com/feeds/latest",
+        "https://www.history.com/feeds/articles",
+        "https://www.ancient-origins.net/rss.xml",
+        "https://www.livescience.com/feeds/all",
+        "https://www.smithsonianmag.com/rss/history-archaeology/",
+        "https://www.reddit.com/r/history/.rss",
+        "https://www.reddit.com/r/UnresolvedMysteries/.rss",
+        "https://www.reddit.com/r/AncientCivilizations/.rss",
     ],
-    voice               = "en-US-JennyNeural",      # free edge-tts
+    voice               = "en-US-GuyNeural",
     elevenlabs_voice_id = "",
-    thumbnail_style     = "food",
-    primary_color       = "#FF6B35",                 # orange
-    upload_schedule     = "0 16 * * 2,4,6",         # Tue/Thu/Sat 4pm UTC
+    thumbnail_style     = "dark_history",
+    primary_color       = "#8B0000",
+    upload_schedule     = "0 16 * * 2,4,6",
     videos_per_week     = 3,
     series_enabled      = True,
-    series_max_parts    = 2,                         # e.g. "Meal Prep Series Pt 1 & 2"
-    min_video_length_sec = 300,                      # 5 min
-    max_video_length_sec = 480,                      # 8 min
+    series_max_parts    = 3,
+    min_video_length_sec = 480,
+    max_video_length_sec = 720,
 )
 
 ALL_CHANNELS = [CHANNEL_A, CHANNEL_B]
