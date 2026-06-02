@@ -114,6 +114,7 @@ def run_single_video(channel, topic: dict, dry_run: bool = False) -> dict:
         thumbnail_text=script.thumbnail_text,
         output_path=thumb_path,
         bg_query=topic["keywords"][0] if topic.get("keywords") else None,
+        story_hook=script.hook if hasattr(script, 'hook') else "",
     )
 
     # ── Cleanup temp ───────────────────────────────────────────────────────────
