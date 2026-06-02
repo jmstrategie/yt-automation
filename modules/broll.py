@@ -1,13 +1,14 @@
 """
 modules/broll.py
 Downloads free stock video clips from Pexels and Pixabay.
-For horror_fiction niche: generates dark atmospheric images with DALL-E 3
+For horror_fiction niche: generates dark atmospheric images with GPT Image
 and converts them to video clips using FFmpeg (Ken Burns zoom effect).
 Uses Claude to extract cinematic, meaningful B-roll search queries from the script.
 """
 
 import os
 import json
+import base64
 import subprocess
 import requests
 from typing import List, Optional
@@ -19,10 +20,7 @@ from config import PEXELS_API_KEY, PIXABAY_API_KEY
 # ── Claude B-roll query extraction ────────────────────────────────────────────
 
 def extract_broll_queries(script_text: str, niche: str, n: int = 6) -> List[str]:
-    """
-    Use Claude to extract meaningful visual B-roll search queries from the script.
-    Falls back to niche defaults if Claude call fails.
-    """
+    """Use Claude to extract meaningful visual B-roll search queries from the script."""
     from config import ANTHROPIC_API_KEY, CLAUDE_MODEL
     import anthropic
 
@@ -104,7 +102,7 @@ Return ONLY a JSON array of {n} strings, no other text, no markdown:
         return fallbacks.get(niche, fallbacks["personal_finance_ai"])[:n]
 
 
-# ── DALL-E horror image generation ────────────────────────────────────────────
+# ── GPT Image horror scene generation ─────────────────────────────────────────
 
 def _generate_horror_scene_prompts(script_text: str, n: int = 8) -> List[str]:
     """Use Claude to extract cinematic horror scene descriptions from the script."""
@@ -115,7 +113,7 @@ def _generate_horror_scene_prompts(script_text: str, n: int = 8) -> List[str]:
 
     prompt = f"""You are a horror cinematographer creating visual scenes for a YouTube horror video.
 
-Read this script and generate {n} DALL-E image prompts for dark atmospheric horror scenes.
+Read this script and generate {n} image prompts for dark atmospheric horror scenes.
 
 SCRIPT:
 {script_text[:2000]}
@@ -131,6 +129,7 @@ RULES:
 - Deep brown, black, sepia color palette with occasional blood red accent
 - Film grain, atmospheric fog, dust particles in air, cobwebs
 - Vary the scenes — different settings and angles for visual interest
+- NEVER describe nature landscapes, icicles, or abstract imagery
 
 Return ONLY a JSON array of {n} strings, no other text, no markdown:
 ["prompt 1", "prompt 2", ...]"""
@@ -151,30 +150,48 @@ Return ONLY a JSON array of {n} strings, no other text, no markdown:
     return prompts[:n]
 
 
-def _image_to_video_clip(img_path: str, clip_path: str, duration: int = 10) -> Optional[str]:
-    """Convert a static image to a video clip with Ken Burns zoom effect."""
+def _image_to_video_clip(img_path: str, clip_path: str, duration: int = 8) -> Optional[str]:
+    """Convert a static image to a video clip with subtle Ken Burns zoom effect."""
     try:
+        frames = duration * 30
         subprocess.run([
             "ffmpeg", "-y",
             "-loop", "1",
             "-i", img_path,
             "-vf", (
-                f"scale=1920:1080:force_original_aspect_ratio=increase,"
+                f"scale=2048:1152:force_original_aspect_ratio=increase,"
                 f"crop=1920:1080,"
-                f"zoompan=z='min(zoom+0.0008,1.3)':d={duration * 30}:"
-                f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1920x1080,"
-                f"fps=30"
+                f"zoompan=z='if(lte(zoom,1.0),1.05,zoom+0.0005)'"
+                f":d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+                f":s=1920x1080:fps=30"
             ),
             "-t", str(duration),
             "-c:v", "libx264",
             "-preset", "fast",
             "-pix_fmt", "yuv420p",
+            "-r", "30",
             clip_path,
         ], check=True, capture_output=True)
         return clip_path
-    except Exception as e:
-        print(f"  [broll] Image to video error: {e}")
-        return None
+    except subprocess.CalledProcessError as e:
+        print(f"  [broll] Zoom error — trying simple version")
+        try:
+            subprocess.run([
+                "ffmpeg", "-y",
+                "-loop", "1",
+                "-i", img_path,
+                "-vf", "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080",
+                "-t", str(duration),
+                "-c:v", "libx264",
+                "-preset", "fast",
+                "-pix_fmt", "yuv420p",
+                "-r", "30",
+                clip_path,
+            ], check=True, capture_output=True)
+            return clip_path
+        except Exception as e2:
+            print(f"  [broll] Simple clip error: {e2}")
+            return None
 
 
 def fetch_horror_images_as_clips(
@@ -183,9 +200,8 @@ def fetch_horror_images_as_clips(
     num_clips: int = 8,
 ) -> List[str]:
     """
-    For horror fiction: generate dark atmospheric images with DALL-E 3
-    and convert each to a 10-second video clip with Ken Burns zoom effect.
-    Much more appropriate than stock footage for horror content.
+    Generate dark atmospheric images with GPT Image model
+    and convert each to an 8-second video clip with Ken Burns zoom effect.
     """
     from config import OPENAI_API_KEY
     from openai import OpenAI
@@ -202,24 +218,30 @@ def fetch_horror_images_as_clips(
 
     for i, scene_prompt in enumerate(scene_prompts):
         try:
-            print(f"  [broll] DALL-E generating horror scene {i+1}/{len(scene_prompts)}...")
+            print(f"  [broll] GPT Image generating horror scene {i+1}/{len(scene_prompts)}...")
+
             response = client.images.generate(
-                model="dall-e-3",
+                model="gpt-image-1",
                 prompt=scene_prompt,
-                size="1792x1024",
+                size="1536x1024",
                 quality="standard",
                 n=1,
             )
-            img_url = response.data[0].url
-            r = requests.get(img_url, timeout=30)
 
+            # gpt-image-1 returns base64, not URL
+            b64_data = response.data[0].b64_json
+            img_data = base64.b64decode(b64_data)
+
+            # save image
             img_path = os.path.join(output_dir, f"horror_img_{i:02d}.jpg")
             with open(img_path, "wb") as f:
-                f.write(r.content)
+                f.write(img_data)
 
+            # convert image to video clip with Ken Burns zoom
             clip_path = os.path.join(output_dir, f"broll_{i:02d}.mp4")
-            result = _image_to_video_clip(img_path, clip_path, duration=10)
+            result = _image_to_video_clip(img_path, clip_path, duration=8)
 
+            # clean up source image
             try:
                 os.remove(img_path)
             except Exception:
@@ -227,7 +249,7 @@ def fetch_horror_images_as_clips(
 
             if result:
                 clip_paths.append(clip_path)
-                print(f"  [broll] Horror clip {i+1} ready ({Path(clip_path).name})")
+                print(f"  [broll] Horror clip {i+1} ready")
 
         except Exception as e:
             print(f"  [broll] Horror scene {i+1} error: {e}")
@@ -236,12 +258,51 @@ def fetch_horror_images_as_clips(
     return clip_paths
 
 
+# ── Local horror footage library ──────────────────────────────────────────────
+
+def fetch_from_local_library(
+    output_dir: str,
+    num_clips: int = 10,
+    library_dir: str = "assets/horror_footage",
+) -> List[str]:
+    """Pick random clips from the local horror footage library."""
+    import random
+    import shutil
+
+    manifest_path = os.path.join(library_dir, "manifest.json")
+    if not os.path.exists(manifest_path):
+        return []
+
+    try:
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+
+        all_clips = [c["path"] for c in manifest["clips"] if os.path.exists(c["path"])]
+        if not all_clips:
+            return []
+
+        selected = random.sample(all_clips, min(num_clips, len(all_clips)))
+        os.makedirs(output_dir, exist_ok=True)
+
+        copied = []
+        for i, src in enumerate(selected):
+            dst = os.path.join(output_dir, f"broll_{i:02d}.mp4")
+            shutil.copy2(src, dst)
+            copied.append(dst)
+
+        print(f"  [broll] {len(copied)} clips from local library")
+        return copied
+
+    except Exception as e:
+        print(f"  [broll] Local library error: {e}")
+        return []
+
+
 # ── Pexels / Pixabay stock footage ────────────────────────────────────────────
 
 def search_pexels_videos(query: str, per_page: int = 5) -> List[str]:
     """Search Pexels for video clips. Returns list of direct video URLs."""
     if not PEXELS_API_KEY:
-        print("  [broll] No Pexels API key — skipping Pexels")
         return []
 
     url = "https://api.pexels.com/videos/search"
@@ -277,7 +338,7 @@ def search_pexels_videos(query: str, per_page: int = 5) -> List[str]:
 
 
 def search_pixabay_videos(query: str, per_page: int = 5) -> List[str]:
-    """Search Pixabay for video clips. Returns list of direct video URLs."""
+    """Search Pixabay for video clips."""
     if not PIXABAY_API_KEY:
         return []
 
@@ -316,7 +377,6 @@ def download_clip(url: str, output_path: str, timeout: int = 60) -> Optional[str
                 f.write(chunk)
         size_mb = os.path.getsize(output_path) / (1024 * 1024)
 
-        # verify duration — skip anything under 4 seconds
         result = subprocess.run(
             ["ffprobe", "-v", "error", "-show_entries", "format=duration",
              "-of", "default=noprint_wrappers=1:nokey=1", output_path],
@@ -345,20 +405,32 @@ def fetch_broll_clips(
 ) -> List[str]:
     """
     Main entry: route to correct B-roll strategy based on niche.
-    - horror_fiction: DALL-E 3 generated images → video clips
-    - everything else: Claude queries → Pexels/Pixabay stock footage
-    Returns list of local file paths.
+    Horror fiction priority:
+      1. Local library (fast, free)
+      2. GPT Image generated scenes (unique, on-brand)
+      3. Pexels/Pixabay fallback
+    All other niches: Claude queries → Pexels/Pixabay
     """
     os.makedirs(output_dir, exist_ok=True)
 
-    # horror fiction gets DALL-E generated visuals — much better than stock
     if niche == "horror_fiction":
+        # try local library first
+        local_clips = fetch_from_local_library(output_dir, num_clips)
+        if len(local_clips) >= num_clips // 2:
+            # mix local clips with GPT Image scenes for variety
+            dalle_dir = output_dir + "_dalle"
+            dalle_clips = fetch_horror_images_as_clips(script_text, dalle_dir, num_clips=3)
+            combined = local_clips[:num_clips - len(dalle_clips)] + dalle_clips
+            print(f"  [broll] Hybrid: {len(local_clips)} local + {len(dalle_clips)} GPT Image")
+            return combined[:num_clips]
+
+        # fallback to pure GPT Image if no local library
+        print("  [broll] No local library — using GPT Image only")
         clips = fetch_horror_images_as_clips(script_text, output_dir, num_clips)
         if clips:
             return clips
-        print("  [broll] DALL-E failed — falling back to stock footage")
 
-    # all other niches: Claude queries + Pexels/Pixabay
+    # all other niches + horror fallback: Claude queries + Pexels/Pixabay
     queries = extract_broll_queries(script_text, niche, n=num_clips)
     clip_paths = []
     clip_index = 0
@@ -392,7 +464,6 @@ if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
 
-    # test horror fiction
     test_script = """
     In 1987, a family in rural Ohio found a porcelain doll sitting in their daughter's rocking chair.
     The doll had not been there the night before. Its eyes were painted open, staring at the bedroom door.
@@ -405,48 +476,3 @@ if __name__ == "__main__":
         num_clips=4,
     )
     print(f"Generated {len(clips)} clips: {clips}")
-
-
-# ── Local horror footage library ──────────────────────────────────────────────
-
-def fetch_from_local_library(
-    output_dir: str,
-    num_clips: int = 10,
-    library_dir: str = "assets/horror_footage",
-) -> List[str]:
-    """
-    Pick random clips from the local horror footage library.
-    Much faster than downloading — zero API cost per run.
-    """
-    import random
-    import shutil
-
-    manifest_path = os.path.join(library_dir, "manifest.json")
-    if not os.path.exists(manifest_path):
-        return []
-
-    try:
-        with open(manifest_path) as f:
-            manifest = json.load(f)
-
-        all_clips = [c["path"] for c in manifest["clips"] if os.path.exists(c["path"])]
-        if not all_clips:
-            return []
-
-        # shuffle and pick num_clips
-        selected = random.sample(all_clips, min(num_clips, len(all_clips)))
-        os.makedirs(output_dir, exist_ok=True)
-
-        # copy selected clips to working dir
-        copied = []
-        for i, src in enumerate(selected):
-            dst = os.path.join(output_dir, f"broll_{i:02d}.mp4")
-            shutil.copy2(src, dst)
-            copied.append(dst)
-
-        print(f"  [broll] {len(copied)} clips from local library")
-        return copied
-
-    except Exception as e:
-        print(f"  [broll] Local library error: {e}")
-        return []
