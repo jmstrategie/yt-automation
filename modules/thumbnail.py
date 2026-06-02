@@ -341,20 +341,25 @@ def generate_horror_fiction_thumbnail(
     scene_context = bg_query or "Victorian room rocking chair"
     hook_excerpt = story_hook[:150] if story_hook else text
 
+    import random
+
+    # randomize scene type for visual variety across videos
+    scenes = [
+        f"Extreme close-up of a weathered porcelain doll face, cracked pale skin, glass eyes reflecting a single candle flame, dark Victorian room background, story: {text}",
+        f"Wide cinematic shot of a small porcelain doll sitting alone in an abandoned Victorian room, moonlight through broken window, long shadows, dusty floor, story: {text}",
+        f"Porcelain doll perched at top of dark wooden staircase, single lamp below casting eerie upward light, peeling wallpaper, cobwebs, story: {text}",
+        f"Creepy porcelain doll sitting at a rain-streaked window at night, backlit by cold blue moonlight, dark silhouette, story: {text}",
+        f"Antique rocking chair with porcelain doll, motion blur suggesting recent movement, candlelight from fireplace, Victorian parlour, story: {text}",
+        f"Three-quarter view of cracked porcelain doll, one eye reflecting candlelight one eye in shadow, dusty attic setting, cobwebs, story: {text}",
+    ]
+
     dalle_prompt = (
-        f"Hyper-realistic horror movie poster art, cinematic photography style, "
-        f"8K photorealistic quality. "
-        f"SCENE: A porcelain doll with cracked pale face and glass eyes catching candlelight, "
-        f"positioned in a dark Victorian interior. The story is about: {text}. "
-        f"COMPOSITION: Extreme close-up or dramatic three-quarter view of the doll, "
-        f"slightly off-center, eyes facing viewer directly, creating uncanny dread. "
-        f"Setting: {scene_context}, dusty wooden floor, aged wallpaper with faded floral pattern, cobwebs. "
-        f"LIGHTING: Single flickering candle OR cold moonlight through broken window, "
-        f"long dramatic shadows, dust particles floating in light beam. "
-        f"COLOR: Deep sepia and black base, warm amber on doll's face from candle, "
-        f"cold blue-grey from background window. Film grain texture. "
-        f"MOOD: Suffocating dread, uncanny valley, something is deeply wrong. "
-        f"ABSOLUTELY NO: text, watermarks, modern objects, bright colors, people's faces, nature landscapes."
+        f"Hyper-realistic horror movie poster art, cinematic photography style, 8K quality. "
+        f"SCENE: {random.choice(scenes)}. "
+        f"COLOR PALETTE: Deep sepia and black base, warm amber candlelight, cold blue moonlight. "
+        f"STYLE: Film grain texture, heavy vignette corners, atmospheric fog, dust particles. "
+        f"MOOD: Suffocating dread, uncanny valley, something deeply wrong. "
+        f"ABSOLUTELY NO: text, watermarks, modern objects, bright colors, people's faces, nature landscapes, icicles."
     )
 
     print(f"  [thumb] Generating story-specific horror thumbnail...")
