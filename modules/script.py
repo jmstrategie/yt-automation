@@ -326,7 +326,7 @@ def generate_script(
 
     response = client.messages.create(
         model=CLAUDE_MODEL,
-        max_tokens=5000,
+        max_tokens=8096,
         messages=[{"role": "user", "content": prompt}],
     )
 
@@ -337,7 +337,31 @@ def generate_script(
             raw = raw[4:]
     raw = raw.strip()
 
-    data = json.loads(raw)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        # script too long — retry with shorter target
+        print(f"  [script] JSON truncated — retrying with shorter script...")
+        shorter_prompt = prompt.replace(
+            f"minimum {min_words} words", f"minimum {min_words // 2} words"
+        ).replace(
+            f"target {max_words} words", f"target {min_words} words"
+        ).replace(
+            "minimum 200 words each", "minimum 100 words each"
+        ).replace(
+            "minimum 100 words each", "minimum 80 words each"
+        )
+        retry_response = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=8096,
+            messages=[{"role": "user", "content": shorter_prompt}],
+        )
+        raw2 = retry_response.content[0].text.strip()
+        if raw2.startswith("```"):
+            raw2 = raw2.split("```")[1]
+            if raw2.startswith("json"):
+                raw2 = raw2[4:]
+        data = json.loads(raw2.strip())
 
     body_text = "\n\n".join(s["content"] for s in data["body_sections"])
     full_text = f"{data['hook']}\n\n{body_text}\n\n{data['cta']}"
