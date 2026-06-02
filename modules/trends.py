@@ -53,6 +53,18 @@ VIDIQ_KEYWORDS = {
         ("budget meals", 120000, 38),
         ("air fryer recipes", 400000, 52),
     ],
+    "horror_fiction": [
+        ("horror stories", 1872291, 71),
+        ("scary stories", 715473, 72),
+        ("true horror stories", 362030, 70),
+        ("paranormal investigation", 74718, 47),
+        ("robert the doll", 50361, 41),
+        ("haunted doll", 7661, 58),
+        ("ghost hunting", 185659, 61),
+        ("haunted", 188001, 61),
+        ("cursed doll", 5000, 35),
+        ("creepy story", 300000, 38),
+    ],
 }
 
 
