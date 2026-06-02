@@ -1,17 +1,22 @@
 """
 modules/broll.py
 Downloads free stock video clips from Pexels and Pixabay.
+For horror_fiction niche: generates dark atmospheric images with DALL-E 3
+and converts them to video clips using FFmpeg (Ken Burns zoom effect).
 Uses Claude to extract cinematic, meaningful B-roll search queries from the script.
 """
 
 import os
 import json
+import subprocess
 import requests
 from typing import List, Optional
 from pathlib import Path
 
 from config import PEXELS_API_KEY, PIXABAY_API_KEY
 
+
+# ── Claude B-roll query extraction ────────────────────────────────────────────
 
 def extract_broll_queries(script_text: str, niche: str, n: int = 6) -> List[str]:
     """
@@ -21,7 +26,6 @@ def extract_broll_queries(script_text: str, niche: str, n: int = 6) -> List[str]
     from config import ANTHROPIC_API_KEY, CLAUDE_MODEL
     import anthropic
 
-    # niche-specific fallbacks if Claude fails
     fallbacks = {
         "personal_finance_ai": [
             "stock market trading screen", "person using smartphone app",
@@ -36,6 +40,18 @@ def extract_broll_queries(script_text: str, niche: str, n: int = 6) -> List[str]
             "cooking pan on stove", "healthy meal plating",
             "grocery shopping produce", "food close up appetizing",
             "kitchen utensils countertop", "family eating dinner table",
+        ],
+        "dark_history": [
+            "ancient ruins stone", "dark forest foggy",
+            "old manuscript candlelight", "archaeological dig site",
+            "ancient temple exterior", "historical map parchment",
+            "medieval castle dark", "ancient artifacts museum",
+            "stormy dramatic sky", "ancient civilization ruins",
+        ],
+        "horror_fiction": [
+            "dark abandoned hallway", "candlelight Victorian room",
+            "creepy old house exterior", "dark forest night",
+            "dusty attic shadows", "old rocking chair empty room",
         ],
     }
 
@@ -55,12 +71,13 @@ RULES:
 - Each query must be 2-4 words, highly visual and concrete
 - Think like a cinematographer — what would you actually film to illustrate each section?
 - NO abstract words, NO single words, NO pronouns, NO filler words
-- Queries must work as stock footage search terms
+- Queries must work as stock footage search terms on Pexels
 - Vary the queries — cover different parts of the script, don't repeat concepts
 - Prefer cinematic, professional-looking footage descriptions
 
-GOOD examples: "stock market trading screen", "person checking investment app", "AI data visualization", "money coins stacking", "financial advisor meeting", "cryptocurrency price chart"
-BAD examples: "An", "But", "money", "Robinhood", "here is why", "trading"
+GOOD examples for finance: "stock market trading screen", "person checking investment app", "AI data visualization", "money coins stacking"
+GOOD examples for horror: "dark abandoned hallway", "candlelight Victorian room", "creepy old house exterior", "foggy dark forest night"
+BAD examples: "An", "But", "money", "here is why", "trading"
 
 Return ONLY a JSON array of {n} strings, no other text, no markdown:
 ["query 1", "query 2", "query 3", "query 4", "query 5", "query 6"]"""
@@ -86,6 +103,140 @@ Return ONLY a JSON array of {n} strings, no other text, no markdown:
         print(f"  [broll] Claude query error: {e} — using fallbacks")
         return fallbacks.get(niche, fallbacks["personal_finance_ai"])[:n]
 
+
+# ── DALL-E horror image generation ────────────────────────────────────────────
+
+def _generate_horror_scene_prompts(script_text: str, n: int = 8) -> List[str]:
+    """Use Claude to extract cinematic horror scene descriptions from the script."""
+    from config import ANTHROPIC_API_KEY, CLAUDE_MODEL
+    import anthropic
+
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+    prompt = f"""You are a horror cinematographer creating visual scenes for a YouTube horror video.
+
+Read this script and generate {n} DALL-E image prompts for dark atmospheric horror scenes.
+
+SCRIPT:
+{script_text[:2000]}
+
+RULES:
+- Each prompt must describe a specific cinematic horror scene
+- Style: hyper-realistic, cinematic, dark atmospheric horror
+- Settings: Victorian rooms, abandoned houses, dark forests, candlelit rooms, dusty attics, old basements
+- Lighting: single candle, moonlight through broken window, dim lamp, deep shadows
+- Mood: ominous, unsettling, dread-inducing, suffocating
+- Include a creepy porcelain or ragdoll in most scenes — positioned unnervingly
+- No text in images, no faces of real people
+- Deep brown, black, sepia color palette with occasional blood red accent
+- Film grain, atmospheric fog, dust particles in air, cobwebs
+- Vary the scenes — different settings and angles for visual interest
+
+Return ONLY a JSON array of {n} strings, no other text, no markdown:
+["prompt 1", "prompt 2", ...]"""
+
+    response = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=1500,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    raw = response.content[0].text.strip()
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+
+    prompts = json.loads(raw.strip())
+    return prompts[:n]
+
+
+def _image_to_video_clip(img_path: str, clip_path: str, duration: int = 10) -> Optional[str]:
+    """Convert a static image to a video clip with Ken Burns zoom effect."""
+    try:
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-loop", "1",
+            "-i", img_path,
+            "-vf", (
+                f"scale=1920:1080:force_original_aspect_ratio=increase,"
+                f"crop=1920:1080,"
+                f"zoompan=z='min(zoom+0.0008,1.3)':d={duration * 30}:"
+                f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1920x1080,"
+                f"fps=30"
+            ),
+            "-t", str(duration),
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-pix_fmt", "yuv420p",
+            clip_path,
+        ], check=True, capture_output=True)
+        return clip_path
+    except Exception as e:
+        print(f"  [broll] Image to video error: {e}")
+        return None
+
+
+def fetch_horror_images_as_clips(
+    script_text: str,
+    output_dir: str,
+    num_clips: int = 8,
+) -> List[str]:
+    """
+    For horror fiction: generate dark atmospheric images with DALL-E 3
+    and convert each to a 10-second video clip with Ken Burns zoom effect.
+    Much more appropriate than stock footage for horror content.
+    """
+    from config import OPENAI_API_KEY
+    from openai import OpenAI
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    if not OPENAI_API_KEY:
+        print("  [broll] No OpenAI key — falling back to stock footage")
+        return []
+
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    scene_prompts = _generate_horror_scene_prompts(script_text, num_clips)
+    clip_paths = []
+
+    for i, scene_prompt in enumerate(scene_prompts):
+        try:
+            print(f"  [broll] DALL-E generating horror scene {i+1}/{len(scene_prompts)}...")
+            response = client.images.generate(
+                model="dall-e-3",
+                prompt=scene_prompt,
+                size="1792x1024",
+                quality="standard",
+                n=1,
+            )
+            img_url = response.data[0].url
+            r = requests.get(img_url, timeout=30)
+
+            img_path = os.path.join(output_dir, f"horror_img_{i:02d}.jpg")
+            with open(img_path, "wb") as f:
+                f.write(r.content)
+
+            clip_path = os.path.join(output_dir, f"broll_{i:02d}.mp4")
+            result = _image_to_video_clip(img_path, clip_path, duration=10)
+
+            try:
+                os.remove(img_path)
+            except Exception:
+                pass
+
+            if result:
+                clip_paths.append(clip_path)
+                print(f"  [broll] Horror clip {i+1} ready ({Path(clip_path).name})")
+
+        except Exception as e:
+            print(f"  [broll] Horror scene {i+1} error: {e}")
+
+    print(f"  [broll] {len(clip_paths)} horror clips ready")
+    return clip_paths
+
+
+# ── Pexels / Pixabay stock footage ────────────────────────────────────────────
 
 def search_pexels_videos(query: str, per_page: int = 5) -> List[str]:
     """Search Pexels for video clips. Returns list of direct video URLs."""
@@ -128,7 +279,6 @@ def search_pexels_videos(query: str, per_page: int = 5) -> List[str]:
 def search_pixabay_videos(query: str, per_page: int = 5) -> List[str]:
     """Search Pixabay for video clips. Returns list of direct video URLs."""
     if not PIXABAY_API_KEY:
-        print("  [broll] No Pixabay API key — skipping Pixabay")
         return []
 
     url = "https://pixabay.com/api/videos/"
@@ -166,8 +316,7 @@ def download_clip(url: str, output_path: str, timeout: int = 60) -> Optional[str
                 f.write(chunk)
         size_mb = os.path.getsize(output_path) / (1024 * 1024)
 
-        # verify it's a real video with sufficient duration
-        import subprocess
+        # verify duration — skip anything under 4 seconds
         result = subprocess.run(
             ["ffprobe", "-v", "error", "-show_entries", "format=duration",
              "-of", "default=noprint_wrappers=1:nokey=1", output_path],
@@ -186,6 +335,8 @@ def download_clip(url: str, output_path: str, timeout: int = 60) -> Optional[str
         return None
 
 
+# ── Main entry point ──────────────────────────────────────────────────────────
+
 def fetch_broll_clips(
     script_text: str,
     niche: str,
@@ -193,14 +344,22 @@ def fetch_broll_clips(
     num_clips: int = 10,
 ) -> List[str]:
     """
-    Main entry: Claude query generation → Pexels search → download clips.
+    Main entry: route to correct B-roll strategy based on niche.
+    - horror_fiction: DALL-E 3 generated images → video clips
+    - everything else: Claude queries → Pexels/Pixabay stock footage
     Returns list of local file paths.
     """
     os.makedirs(output_dir, exist_ok=True)
 
-    # get cinematic queries from Claude
-    queries = extract_broll_queries(script_text, niche, n=num_clips)
+    # horror fiction gets DALL-E generated visuals — much better than stock
+    if niche == "horror_fiction":
+        clips = fetch_horror_images_as_clips(script_text, output_dir, num_clips)
+        if clips:
+            return clips
+        print("  [broll] DALL-E failed — falling back to stock footage")
 
+    # all other niches: Claude queries + Pexels/Pixabay
+    queries = extract_broll_queries(script_text, niche, n=num_clips)
     clip_paths = []
     clip_index = 0
 
@@ -208,7 +367,6 @@ def fetch_broll_clips(
         if len(clip_paths) >= num_clips:
             break
 
-        # try Pexels first (higher quality), fallback to Pixabay
         urls = search_pexels_videos(query, per_page=2)
         if not urls:
             urls = search_pixabay_videos(query, per_page=2)
@@ -233,12 +391,62 @@ def fetch_broll_clips(
 if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
+
+    # test horror fiction
+    test_script = """
+    In 1987, a family in rural Ohio found a porcelain doll sitting in their daughter's rocking chair.
+    The doll had not been there the night before. Its eyes were painted open, staring at the bedroom door.
+    What happened next would destroy the family completely.
+    """
     clips = fetch_broll_clips(
-        "Robinhood just launched AI trading bots that buy and sell stocks automatically. "
-        "78% of retail traders using algorithmic strategies lose money. "
-        "We explain what's really happening with AI investing apps.",
-        "personal_finance_ai",
-        "temp/broll_test",
-        num_clips=6,
+        test_script,
+        "horror_fiction",
+        "temp/broll_horror_test",
+        num_clips=4,
     )
-    print(clips)
+    print(f"Generated {len(clips)} clips: {clips}")
+
+
+# ── Local horror footage library ──────────────────────────────────────────────
+
+def fetch_from_local_library(
+    output_dir: str,
+    num_clips: int = 10,
+    library_dir: str = "assets/horror_footage",
+) -> List[str]:
+    """
+    Pick random clips from the local horror footage library.
+    Much faster than downloading — zero API cost per run.
+    """
+    import random
+    import shutil
+
+    manifest_path = os.path.join(library_dir, "manifest.json")
+    if not os.path.exists(manifest_path):
+        return []
+
+    try:
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+
+        all_clips = [c["path"] for c in manifest["clips"] if os.path.exists(c["path"])]
+        if not all_clips:
+            return []
+
+        # shuffle and pick num_clips
+        selected = random.sample(all_clips, min(num_clips, len(all_clips)))
+        os.makedirs(output_dir, exist_ok=True)
+
+        # copy selected clips to working dir
+        copied = []
+        for i, src in enumerate(selected):
+            dst = os.path.join(output_dir, f"broll_{i:02d}.mp4")
+            shutil.copy2(src, dst)
+            copied.append(dst)
+
+        print(f"  [broll] {len(copied)} clips from local library")
+        return copied
+
+    except Exception as e:
+        print(f"  [broll] Local library error: {e}")
+        return []

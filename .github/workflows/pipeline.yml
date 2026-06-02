@@ -27,9 +27,9 @@ on:
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
@@ -53,14 +53,54 @@ jobs:
           curl -sL "https://github.com/googlefonts/roboto/raw/main/src/hinted/Roboto-Bold.ttf" -o assets/fonts/Roboto-Bold.ttf
           curl -sL "https://github.com/googlefonts/roboto/raw/main/src/hinted/Roboto-Regular.ttf" -o assets/fonts/Roboto-Regular.ttf
 
+      - name: Cache horror footage library
+        uses: actions/cache@v4
+        with:
+          path: assets/horror_footage/
+          key: horror-footage-v1
+          restore-keys: |
+            horror-footage-
+
+      - name: Build horror footage library if not cached
+        env:
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+        run: |
+          if [ ! -f "assets/horror_footage/manifest.json" ]; then
+            echo "No horror footage cache — downloading library..."
+            python3 download_horror_footage.py
+          else
+            COUNT=$(python3 -c "import json; d=json.load(open('assets/horror_footage/manifest.json')); print(d['total_clips'])")
+            echo "Horror footage library loaded: $COUNT clips"
+          fi
+
       - name: Write secrets
         env:
           CLIENT_SECRETS_A: ${{ secrets.CLIENT_SECRETS_CHANNEL_A }}
           TOKEN_A: ${{ secrets.TOKEN_CHANNEL_A }}
+          CLIENT_SECRETS_B: ${{ secrets.CLIENT_SECRETS_CHANNEL_B }}
+          TOKEN_B: ${{ secrets.TOKEN_CHANNEL_B }}
         run: |
           mkdir -p secrets
           printf '%s' "$CLIENT_SECRETS_A" > secrets/client_secrets_channelA.json
-          echo "$TOKEN_A" | base64 --decode > secrets/token_channelA.json
+          printf '%s' "$TOKEN_A" | base64 --decode > secrets/token_channelA.json
+          printf '%s' "$CLIENT_SECRETS_B" > secrets/client_secrets_channelB.json
+          printf '%s' "$TOKEN_B" | base64 --decode > secrets/token_channelB.json
+
+      - name: Determine channel
+        id: channel
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "channel=${{ github.event.inputs.channel }}" >> $GITHUB_OUTPUT
+            echo "dry_run=${{ github.event.inputs.dry_run }}" >> $GITHUB_OUTPUT
+          else
+            HOUR=$(date -u +%H)
+            if [ "$HOUR" = "14" ]; then
+              echo "channel=A" >> $GITHUB_OUTPUT
+            else
+              echo "channel=B" >> $GITHUB_OUTPUT
+            fi
+            echo "dry_run=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Run pipeline
         env:
@@ -68,12 +108,13 @@ jobs:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           DRY_FLAG=""
-          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+          if [ "${{ steps.channel.outputs.dry_run }}" = "true" ]; then
             DRY_FLAG="--dry-run"
           fi
-          CHANNEL="${{ github.event.inputs.channel }}"
+          CHANNEL="${{ steps.channel.outputs.channel }}"
           if [ -z "$CHANNEL" ]; then
             CHANNEL="A"
           fi

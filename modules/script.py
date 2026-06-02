@@ -3,11 +3,12 @@ modules/script.py
 Uses Claude to write full video scripts with hook, body, and CTA.
 Handles both standalone videos and multi-part series.
 Generates SEO-optimised descriptions with chapter markers and consistent footer.
+Supports niches: personal_finance_ai, food_recipes, dark_history, horror_fiction
 """
 
 import json
 import anthropic
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional
 
 from config import ChannelConfig, ANTHROPIC_API_KEY, CLAUDE_MODEL
@@ -16,13 +17,13 @@ from config import ChannelConfig, ANTHROPIC_API_KEY, CLAUDE_MODEL
 @dataclass
 class VideoScript:
     title: str
-    description: str          # YouTube description (SEO optimised + chapters + footer)
-    tags: List[str]           # YouTube tags
-    hook: str                 # first 30 seconds
-    body: str                 # main content
-    cta: str                  # call to action / outro
-    full_text: str            # hook + body + cta combined for TTS
-    chapters: List[dict]      # list of {title, approx_seconds}
+    description: str
+    tags: List[str]
+    hook: str
+    body: str
+    cta: str
+    full_text: str
+    chapters: List[dict]
     part: int = 1
     total_parts: int = 1
     series_title: Optional[str] = None
@@ -58,9 +59,24 @@ https://www.youtube.com/@ChuckysUntoldStories
 🔔 Turn on notifications — history's darkest secrets await
 
 ─────────────────────────────
-DISCLAIMER: Content is for educational and entertainment purposes only. All historical claims are based on available research and sources.
+DISCLAIMER: Content is for educational and entertainment purposes only.
 ─────────────────────────────
 #DarkHistory #AncientMysteries #UntoldStories #History #Mysteries #LostCivilizations #HistoricalFacts #AncientSecrets
+""",
+    "horror_fiction": """
+─────────────────────────────
+💀 CHUCKY'S UNTOLD STORIES — Horror Fiction & Cursed Tales
+New videos every Tuesday, Thursday & Saturday
+
+📌 SUBSCRIBE for weekly horror stories:
+https://www.youtube.com/@ChuckysUntoldStories
+
+🔔 Turn on notifications — if you dare
+
+─────────────────────────────
+DISCLAIMER: All stories are fictional and created for entertainment purposes only. Any resemblance to real events or persons is purely coincidental.
+─────────────────────────────
+#HorrorStory #ScaryStory #CursedDoll #HorrorFiction #CreepyStory #HauntedDoll #HorrorNarration #ScaryTales #CreepyPasta #HorrorChannel
 """,
 }
 
@@ -78,7 +94,7 @@ TARGET LENGTH: {min_sec}–{max_sec} seconds of spoken audio (approx {min_words}
 
 SCRIPT RULES:
 - Open with a powerful hook — a surprising stat, bold claim, or relatable problem. First 3 sentences must grab attention immediately.
-- Include the target keyword naturally in the first 30 seconds of the script
+- Include the target keyword naturally in the first 30 seconds
 - No filler phrases: never say "In this video I will...", "Don't forget to like and subscribe"
 - Write for a neutral American voice — short sentences, conversational but authoritative
 - Use real numbers, examples, and analogies to make complex ideas simple
@@ -86,18 +102,20 @@ SCRIPT RULES:
 - Structure the body in 4-6 clear sections with distinct topic shifts (these become chapter markers)
 - End with a specific, actionable CTA — not generic subscribe begging
 - If part {part} of {total_parts}, briefly recap previous part (if part > 1) and tease next part at end
+- IMPORTANT: Write the FULL script — minimum {min_words} words, target {max_words} words
 
 Return ONLY valid JSON, no markdown fences:
 {{
   "title": "Final YouTube title (under 60 chars, includes target keyword)",
-  "hook": "First 30 seconds of script",
+  "hook": "First 30 seconds of script — at least 80 words",
   "body_sections": [
-    {{"section_title": "Short chapter name", "content": "Section content"}},
-    {{"section_title": "Short chapter name", "content": "Section content"}},
-    {{"section_title": "Short chapter name", "content": "Section content"}},
-    {{"section_title": "Short chapter name", "content": "Section content"}}
+    {{"section_title": "Short chapter name", "content": "Full section content — at least 150 words each"}},
+    {{"section_title": "Short chapter name", "content": "Full section content — at least 150 words each"}},
+    {{"section_title": "Short chapter name", "content": "Full section content — at least 150 words each"}},
+    {{"section_title": "Short chapter name", "content": "Full section content — at least 150 words each"}},
+    {{"section_title": "Short chapter name", "content": "Full section content — at least 150 words each"}}
   ],
-  "cta": "Closing 20-30 seconds",
+  "cta": "Closing 30-40 seconds — at least 80 words",
   "tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8"],
   "thumbnail_text": "3-5 bold words for thumbnail overlay",
   "seo_description_intro": "First 150 chars of description — must include target keyword naturally and hook the reader"
@@ -122,18 +140,19 @@ SCRIPT RULES:
 - No on-camera references — voiceover over stock footage
 - Structure in 4-5 clear sections (intro, ingredients, steps, tips, outro)
 - End with a tip, variation, or meal-prep suggestion
+- IMPORTANT: Write the FULL script — minimum {min_words} words, target {max_words} words
 
 Return ONLY valid JSON, no markdown fences:
 {{
   "title": "Final YouTube title (under 60 chars, includes target keyword)",
-  "hook": "First 30 seconds",
+  "hook": "First 30 seconds — at least 80 words",
   "body_sections": [
-    {{"section_title": "Short chapter name", "content": "Section content"}},
-    {{"section_title": "Short chapter name", "content": "Section content"}},
-    {{"section_title": "Short chapter name", "content": "Section content"}},
-    {{"section_title": "Short chapter name", "content": "Section content"}}
+    {{"section_title": "Short chapter name", "content": "Full section content — at least 150 words each"}},
+    {{"section_title": "Short chapter name", "content": "Full section content — at least 150 words each"}},
+    {{"section_title": "Short chapter name", "content": "Full section content — at least 150 words each"}},
+    {{"section_title": "Short chapter name", "content": "Full section content — at least 150 words each"}}
   ],
-  "cta": "Closing 20-30 seconds",
+  "cta": "Closing 30 seconds — at least 60 words",
   "tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8"],
   "thumbnail_text": "3-5 bold words for thumbnail overlay",
   "seo_description_intro": "First 150 chars — must include target keyword and hook the reader"
@@ -157,48 +176,79 @@ SCRIPT RULES:
 - No on-camera references — pure voiceover narration
 - Structure in 4-6 sections that build on each other dramatically
 - End with a thought-provoking question or revelation that seeds the next video
+- IMPORTANT: Write the FULL script — minimum {min_words} words, target {max_words} words
 
 Return ONLY valid JSON, no markdown fences:
 {{
   "title": "Final YouTube title (under 60 chars, includes target keyword)",
-  "hook": "First 30 seconds — shocking opening fact or mystery",
+  "hook": "First 30 seconds — shocking opening fact or mystery — at least 80 words",
   "body_sections": [
-    {{"section_title": "Short chapter name", "content": "Section content"}},
-    {{"section_title": "Short chapter name", "content": "Section content"}},
-    {{"section_title": "Short chapter name", "content": "Section content"}},
-    {{"section_title": "Short chapter name", "content": "Section content"}}
+    {{"section_title": "Short chapter name", "content": "Full section content — at least 150 words each"}},
+    {{"section_title": "Short chapter name", "content": "Full section content — at least 150 words each"}},
+    {{"section_title": "Short chapter name", "content": "Full section content — at least 150 words each"}},
+    {{"section_title": "Short chapter name", "content": "Full section content — at least 150 words each"}}
   ],
-  "cta": "Closing 20-30 seconds — revelation + tease next video",
+  "cta": "Closing 30 seconds — revelation + tease next video — at least 60 words",
   "tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8"],
   "thumbnail_text": "3-5 bold mysterious words for thumbnail",
   "seo_description_intro": "First 150 chars — mysterious hook that includes target keyword"
 }}"""
 
 
+HORROR_FICTION_SCRIPT_PROMPT = """You are a master horror storyteller writing scripts for a YouTube horror channel featuring cursed dolls and dark fiction.
+Write a spine-chilling, atmospheric horror story script.
+
+VIDEO TITLE: {title}
+TARGET KEYWORD: {target_keyword}
+ANGLE: {angle}
+PART: {part} of {total_parts}
+TARGET LENGTH: {min_sec}–{max_sec} seconds of spoken audio (approx {min_words}–{max_words} words)
+
+SCRIPT RULES:
+- Open with a shocking, specific detail that immediately creates dread — a date, a location, a strange event
+- Build tension slowly — use pauses in pacing, repetition, and vivid sensory details (sounds, smells, textures, cold)
+- Write for a deep, slow, measured male voice — deliberate pacing, ominous and hypnotic tone
+- Blend fiction with real-sounding details (fake names, addresses, dates) to feel authentic and credible
+- No on-camera references — pure atmospheric narration throughout
+- Structure in 5-6 sections that escalate in dread and horror
+- Each section must end on a disturbing revelation or cliffhanger that compels listening
+- End with an unresolved question or shocking twist that seeds curiosity for the next video
+- Never break the horror atmosphere — no humor, no lighthearted moments whatsoever
+- IMPORTANT: Write the FULL script — minimum {min_words} words, target {max_words} words. This is critical.
+
+Return ONLY valid JSON, no markdown fences:
+{{
+  "title": "Final YouTube title (under 60 chars, mysterious and compelling)",
+  "hook": "First 30 seconds — shocking opening that creates immediate dread — minimum 100 words",
+  "body_sections": [
+    {{"section_title": "Short ominous chapter name", "content": "Full horror section — minimum 200 words each"}},
+    {{"section_title": "Short ominous chapter name", "content": "Full horror section — minimum 200 words each"}},
+    {{"section_title": "Short ominous chapter name", "content": "Full horror section — minimum 200 words each"}},
+    {{"section_title": "Short ominous chapter name", "content": "Full horror section — minimum 200 words each"}},
+    {{"section_title": "Short ominous chapter name", "content": "Full horror section — minimum 200 words each"}}
+  ],
+  "cta": "Closing 30-40 seconds — unsettling revelation that teases next story — minimum 80 words",
+  "tags": ["horror story", "scary story", "cursed doll", "horror fiction", "creepy story", "haunted doll", "scary tales", "horror narration"],
+  "thumbnail_text": "3-5 ominous words for thumbnail",
+  "seo_description_intro": "First 150 chars — mysterious hook that draws viewers in, includes target keyword"
+}}"""
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
 def _words_from_seconds(sec: int) -> int:
     return int(sec * 140 / 60)
 
 
 def _estimate_chapter_timestamps(hook: str, sections: List[dict], cta: str) -> List[dict]:
-    """
-    Estimate chapter timestamps based on word count per section.
-    Speaking pace: ~140 words per minute.
-    """
     chapters = [{"title": "Introduction", "seconds": 0}]
     words_so_far = len(hook.split())
-
     for section in sections:
         seconds = int(words_so_far / 140 * 60)
-        chapters.append({
-            "title": section["section_title"],
-            "seconds": seconds,
-        })
+        chapters.append({"title": section["section_title"], "seconds": seconds})
         words_so_far += len(section["content"].split())
-
-    # CTA chapter
     cta_seconds = int(words_so_far / 140 * 60)
     chapters.append({"title": "Final Thoughts", "seconds": cta_seconds})
-
     return chapters
 
 
@@ -215,26 +265,26 @@ def _build_description(
     title: str,
     target_keyword: str,
 ) -> str:
-    """Build full YouTube description with SEO intro, chapters, and footer."""
-
-    # chapters section
-    chapter_lines = []
-    for ch in chapters:
-        ts = _format_timestamp(ch["seconds"])
-        chapter_lines.append(f"{ts} {ch['title']}")
-
+    chapter_lines = [f"{_format_timestamp(ch['seconds'])} {ch['title']}" for ch in chapters]
     footer = CHANNEL_FOOTERS.get(niche, CHANNEL_FOOTERS["personal_finance_ai"])
+
+    if niche == "horror_fiction":
+        middle = f"Tonight's story explores the terrifying world of {target_keyword}. What you're about to hear has been documented, witnessed, and cannot be explained."
+    else:
+        middle = f"In this video, we break down everything you need to know about {target_keyword} in a clear, practical way — no fluff, no jargon."
 
     description = f"""{seo_intro}
 
 📌 CHAPTERS:
 {chr(10).join(chapter_lines)}
 
-In this video, we break down everything you need to know about {target_keyword} in a clear, practical way — no fluff, no jargon. Whether you're a complete beginner or looking to level up your knowledge, this video covers the key strategies that actually work in 2026.
+{middle}
 {footer}"""
 
     return description.strip()
 
+
+# ── Main script generator ──────────────────────────────────────────────────────
 
 def generate_script(
     channel: ChannelConfig,
@@ -242,7 +292,6 @@ def generate_script(
     part: int = 1,
     total_parts: int = 1,
 ) -> VideoScript:
-    """Generate a full video script for a given topic dict."""
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
     title = topic["series_titles"][part - 1] if topic.get("is_series") and topic.get("series_titles") else topic["title"]
@@ -252,11 +301,12 @@ def generate_script(
     min_words = _words_from_seconds(channel.min_video_length_sec)
     max_words = _words_from_seconds(channel.max_video_length_sec)
 
-    # select prompt based on niche
     if channel.niche == "food_recipes":
         prompt_template = FOOD_SCRIPT_PROMPT
     elif channel.niche == "dark_history":
         prompt_template = DARK_HISTORY_SCRIPT_PROMPT
+    elif channel.niche == "horror_fiction":
+        prompt_template = HORROR_FICTION_SCRIPT_PROMPT
     else:
         prompt_template = FINANCE_SCRIPT_PROMPT
 
@@ -276,7 +326,7 @@ def generate_script(
 
     response = client.messages.create(
         model=CLAUDE_MODEL,
-        max_tokens=3000,
+        max_tokens=5000,
         messages=[{"role": "user", "content": prompt}],
     )
 
@@ -289,18 +339,11 @@ def generate_script(
 
     data = json.loads(raw)
 
-    # build full spoken text
     body_text = "\n\n".join(s["content"] for s in data["body_sections"])
     full_text = f"{data['hook']}\n\n{body_text}\n\n{data['cta']}"
 
-    # generate chapter timestamps
-    chapters = _estimate_chapter_timestamps(
-        data["hook"],
-        data["body_sections"],
-        data["cta"],
-    )
+    chapters = _estimate_chapter_timestamps(data["hook"], data["body_sections"], data["cta"])
 
-    # build SEO description with chapters and footer
     description = _build_description(
         seo_intro=data.get("seo_description_intro", title),
         chapters=chapters,
@@ -331,7 +374,6 @@ def generate_script(
 
 
 def generate_series_scripts(channel: ChannelConfig, topic: dict) -> List[VideoScript]:
-    """Generate all parts of a series topic."""
     parts = topic.get("series_parts", 1)
     scripts = []
     for part_num in range(1, parts + 1):
@@ -343,18 +385,17 @@ def generate_series_scripts(channel: ChannelConfig, topic: dict) -> List[VideoSc
 if __name__ == "__main__":
     from dotenv import load_dotenv
     load_dotenv()
-    from config import CHANNEL_A
+    from config import CHANNEL_B
     test_topic = {
-        "title": "Zero Based Budgeting: The Method That Works in 2026",
-        "angle": "Practical step-by-step guide for beginners",
-        "target_keyword": "zero based budgeting",
+        "title": "7 Cursed Dolls That Ruined Their Owners Lives",
+        "angle": "Documented cases of cursed dolls with witnesses and evidence",
+        "target_keyword": "cursed doll",
         "is_series": False,
         "series_parts": 1,
         "series_titles": [],
-        "keywords": ["zero based budgeting", "budgeting", "personal finance", "money management"],
+        "keywords": ["cursed doll", "haunted doll", "horror story", "scary story"],
     }
-    script = generate_script(CHANNEL_A, test_topic)
+    script = generate_script(CHANNEL_B, test_topic)
     print(f"\nTitle: {script.title}")
-    print(f"Thumbnail: {script.thumbnail_text}")
+    print(f"Word count: {len(script.full_text.split())}")
     print(f"Chapters: {script.chapters}")
-    print(f"\nDescription preview:\n{script.description[:500]}")
