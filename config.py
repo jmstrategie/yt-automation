@@ -97,8 +97,8 @@ CHANNEL_B = ChannelConfig(
     videos_per_week     = 3,
     series_enabled      = True,
     series_max_parts    = 3,
-    min_video_length_sec = 480,
-    max_video_length_sec = 720,
+    min_video_length_sec = 360,
+    max_video_length_sec = 540,
 )
 
 ALL_CHANNELS = [CHANNEL_A, CHANNEL_B]
