@@ -37,13 +37,14 @@ def _hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
 
 
 def _generate_dalle_background(prompt: str, output_path: str, quality: str = "standard") -> Optional[str]:
-    """Generate a background using DALL-E 3."""
+    """Generate a background using GPT Image models."""
     if not OPENAI_API_KEY:
         return None
     try:
+        import base64
         from openai import OpenAI
         client = OpenAI(api_key=OPENAI_API_KEY)
-        print(f"  [thumb] DALL-E 3 generating background ({quality})...")
+        print(f"  [thumb] GPT Image generating background ({quality})...")
         response = client.images.generate(
             model="gpt-image-1",
             prompt=prompt,
@@ -51,15 +52,16 @@ def _generate_dalle_background(prompt: str, output_path: str, quality: str = "st
             quality=quality,
             n=1,
         )
-        img_url = response.data[0].url
-        r = requests.get(img_url, timeout=30)
-        img = Image.open(BytesIO(r.content)).convert("RGB")
+        # gpt-image-1 returns base64, not URL
+        b64_data = response.data[0].b64_json
+        img_data = base64.b64decode(b64_data)
+        img = Image.open(BytesIO(img_data)).convert("RGB")
         img = img.resize((THUMB_WIDTH, THUMB_HEIGHT), Image.LANCZOS)
         img.save(output_path, "JPEG", quality=95)
-        print(f"  [thumb] DALL-E background saved")
+        print(f"  [thumb] Background saved")
         return output_path
     except Exception as e:
-        print(f"  [thumb] DALL-E error: {e} — falling back to Pexels")
+        print(f"  [thumb] GPT Image error: {e} — falling back to Pexels")
         return None
 
 
