@@ -36,6 +36,77 @@ def log(msg: str, level: str = "INFO") -> None:
     ts = datetime.now().strftime("%H:%M:%S")
     print(f"[{ts}] [{level}] {msg}")
 
+    
+# ── VidQ thumbnail tool request ─────────────────────────────────────────────────────    
+    
+def _generate_vidiq_thumbnail(channel, script, topic, thumb_path: str) -> str:
+    """
+    Generate thumbnail using VidIQ AI for finance channel.
+    Falls back to Pillow if VidIQ fails.
+    """
+    try:
+        import anthropic as _anthropic
+        from config import ANTHROPIC_API_KEY
+
+        client = _anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+        # build finance-specific query
+        user_query = (
+            f"Vertical split thumbnail, left panel dark red with bold white text, "
+            f"center shows smartphone with finance/investment app and stock charts, "
+            f"right panel dark green with bold white text. "
+            f"Text to feature: '{script.thumbnail_text}'. "
+            f"Red down arrow on left, green up arrow on right. "
+            f"Dark dramatic professional finance aesthetic. No branding."
+        )
+
+        log(f"Generating VidIQ thumbnail for: '{script.title}'")
+
+        # use Anthropic API to call VidIQ MCP tool
+        response = client.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=1000,
+            tools=[{
+                "type": "computer_20241022",
+                "name": "computer",
+            }],
+            mcp_servers=[{
+                "type": "url",
+                "url": "https://mcp.vidiq.com/mcp",
+                "name": "vidiq-mcp",
+            }],
+            messages=[{
+                "role": "user",
+                "content": f"Generate a YouTube thumbnail. Title: '{script.title}'. {user_query}. Return only the imageUrl from the result."
+            }],
+        )
+
+        # extract image URL from response
+        for block in response.content:
+            if hasattr(block, "text") and "imageUrl" in block.text:
+                import re, json
+                # try to find URL in response
+                urls = re.findall(r'https://[^\s"\']+\.(?:png|jpg|jpeg)', block.text)
+                if urls:
+                    from modules.thumbnail_vidiq import download_thumbnail
+                    result = download_thumbnail(urls[0], thumb_path)
+                    if result:
+                        log(f"VidIQ thumbnail saved")
+                        return result
+
+    except Exception as e:
+        log(f"VidIQ thumbnail failed: {e} — using Pillow fallback", "WARN")
+
+    # fallback to Pillow
+    from modules.thumbnail import generate_thumbnail
+    generate_thumbnail(
+        channel=channel,
+        thumbnail_text=script.thumbnail_text,
+        output_path=thumb_path,
+        bg_query=topic["keywords"][0] if topic.get("keywords") else None,
+        story_hook=script.hook,
+    )
+    return thumb_path    
 
 # ── Single video pipeline ─────────────────────────────────────────────────────
 
@@ -109,13 +180,25 @@ def run_single_video(channel, topic: dict, dry_run: bool = False) -> dict:
     # ── 5. Thumbnail ───────────────────────────────────────────────────────────
     log("Step 5/5: Generating thumbnail...")
     thumb_path = os.path.join(out_dir, f"{run_id}_thumb.jpg")
-    generate_thumbnail(
-        channel=channel,
-        thumbnail_text=script.thumbnail_text,
-        output_path=thumb_path,
-        bg_query=topic["keywords"][0] if topic.get("keywords") else None,
-        story_hook=script.hook if hasattr(script, 'hook') else "",
-    )
+
+    # Channel A uses VidIQ thumbnail generation
+    # Channel B uses GPT Image horror style
+    if channel.thumbnail_style == "horror_fiction":
+        generate_thumbnail(
+            channel=channel,
+            thumbnail_text=script.thumbnail_text,
+            output_path=thumb_path,
+            bg_query=topic["keywords"][0] if topic.get("keywords") else None,
+            story_hook=script.hook,
+        )
+    else:
+        # VidIQ thumbnail for finance channel
+        thumb_path = _generate_vidiq_thumbnail(
+            channel=channel,
+            script=script,
+            topic=topic,
+            thumb_path=thumb_path,
+        )
 
     # ── Cleanup temp ───────────────────────────────────────────────────────────
     try:
@@ -202,6 +285,29 @@ def run_channel(channel, dry_run: bool = False, num_topics: int = 1) -> None:
             description=result["script"].description,
             tags=result["script"].tags,
         )
+
+    # ── Auto-generate Short from long-form hook ────────────────────────────────
+    log("Generating Short from long-form hook...")
+    try:
+        from modules.shorts import run_shorts_pipeline
+        import os, shutil
+        shorts_dir = os.path.join(TEMP_DIR, f"{run_id}_short")
+        short_id = run_shorts_pipeline(
+            channel=channel,
+            long_form_hook=script.hook,
+            long_form_title=script.title,
+            target_keyword=topic.get("target_keyword", ""),
+            output_dir=shorts_dir,
+            dry_run=dry_run,
+        )
+        if short_id:
+            log(f"Short live: https://youtube.com/shorts/{short_id}")
+        try:
+            shutil.rmtree(shorts_dir)
+        except Exception:
+            pass
+    except Exception as e:
+        log(f"Shorts generation failed: {e} — continuing", "WARN")
 
     log(f"Channel {channel.name} — DONE")
 

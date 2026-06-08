@@ -1,8 +1,8 @@
 """
 modules/thumbnail.py
-Generates YouTube thumbnails using Pillow + DALL-E 3 backgrounds.
-Supports four styles: finance, food, dark_history, horror_fiction.
-Horror fiction uses story-specific DALL-E HD prompts with cinematic grading.
+Generates YouTube thumbnails.
+Channel A (finance): VidIQ AI generation via Anthropic MCP → Pillow fallback
+Channel B (horror): GPT Image cinematic horror style
 """
 
 import os
@@ -36,7 +36,7 @@ def _hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
     return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
 
 
-def _generate_dalle_background(prompt: str, output_path: str, quality: str = "standard") -> Optional[str]:
+def _generate_dalle_background(prompt: str, output_path: str, quality: str = "medium") -> Optional[str]:
     """Generate a background using GPT Image models."""
     if not OPENAI_API_KEY:
         return None
@@ -52,7 +52,6 @@ def _generate_dalle_background(prompt: str, output_path: str, quality: str = "st
             quality=quality,
             n=1,
         )
-        # gpt-image-1 returns base64, not URL
         b64_data = response.data[0].b64_json
         img_data = base64.b64decode(b64_data)
         img = Image.open(BytesIO(img_data)).convert("RGB")
@@ -90,7 +89,7 @@ def _fetch_pexels_background(query: str, output_path: str) -> Optional[str]:
         return None
 
 
-def _get_background(dalle_prompt: str, pexels_query: str, bg_path: str, quality: str = "standard") -> Optional[Image.Image]:
+def _get_background(dalle_prompt: str, pexels_query: str, bg_path: str, quality: str = "medium") -> Optional[Image.Image]:
     bg = _generate_dalle_background(dalle_prompt, bg_path, quality=quality)
     if not bg:
         bg = _fetch_pexels_background(pexels_query, bg_path)
@@ -116,11 +115,9 @@ def _draw_text_with_shadow(
 
 
 def _apply_vignette(img: Image.Image, strength: float = 0.7) -> Image.Image:
-    """Apply smooth radial vignette — darkens corners dramatically."""
     width, height = img.size
     cx, cy = width // 2, height // 2
     max_dist = math.sqrt(cx**2 + cy**2)
-
     vignette = Image.new("L", (width, height), 255)
     pixels = vignette.load()
     for y in range(height):
@@ -129,7 +126,6 @@ def _apply_vignette(img: Image.Image, strength: float = 0.7) -> Image.Image:
             normalized = dist / max_dist
             factor = max(0, 1 - (normalized * strength * 1.4) ** 1.5)
             pixels[x, y] = int(255 * factor)
-
     vignette_rgb = Image.merge("RGB", [vignette, vignette, vignette])
     result = Image.new("RGB", img.size)
     img_data = list(img.getdata())
@@ -143,7 +139,6 @@ def _apply_vignette(img: Image.Image, strength: float = 0.7) -> Image.Image:
 
 
 def _apply_horror_grading(img: Image.Image) -> Image.Image:
-    """Cinematic horror color grading: desaturate, contrast boost, darken, vignette."""
     img = ImageEnhance.Color(img).enhance(0.65)
     img = ImageEnhance.Contrast(img).enhance(1.35)
     img = ImageEnhance.Brightness(img).enhance(0.8)
@@ -160,39 +155,108 @@ def generate_finance_thumbnail(
     bg_query: Optional[str] = None,
     **kwargs,
 ) -> str:
+    """
+    Finance thumbnail — tries VidIQ first, falls back to Pillow vertical split.
+    VidIQ produces professional quality matching top performers.
+    Pillow fallback: vertical split red/center/green with bold text.
+    """
+    # ── Try VidIQ first ────────────────────────────────────────────────────────
+    try:
+        from modules.thumbnail_vidiq import generate_via_anthropic_mcp
+        title = kwargs.get("title", text)
+        result = generate_via_anthropic_mcp(title, text, output_path)
+        if result:
+            return result
+        print("  [thumb] VidIQ failed — using Pillow fallback")
+    except Exception as e:
+        print(f"  [thumb] VidIQ unavailable: {e} — using Pillow")
+
+    # ── Pillow fallback: vertical split ───────────────────────────────────────
     accent = _hex_to_rgb(channel.primary_color)
     bg_path = output_path.replace(".jpg", "_bg.jpg")
 
     dalle_prompt = (
-        f"Cinematic wide shot for a YouTube finance thumbnail, "
-        f"dark moody atmosphere, professional financial theme, "
-        f"{'about ' + bg_query if bg_query else 'stock market and technology'}, "
-        f"dramatic lighting, deep blue and dark tones, 4K quality, "
-        f"no text, no people's faces, photorealistic"
+        f"Cinematic dark finance YouTube thumbnail background, "
+        f"{'about ' + bg_query if bg_query else 'stock market trading'}, "
+        f"dramatic red and green stock chart arrows, dark moody atmosphere, "
+        f"professional financial imagery, smartphone app screens, "
+        f"deep dark blue and black tones, 4K quality, no text, photorealistic"
     )
 
-    bg_img = _get_background(dalle_prompt, bg_query or "finance technology", bg_path)
+    bg_img = _get_background(dalle_prompt, bg_query or "stock market red green", bg_path, quality="medium")
 
+    img = Image.new("RGB", (THUMB_WIDTH, THUMB_HEIGHT), (8, 10, 20))
     if bg_img:
-        img = ImageEnhance.Brightness(bg_img).enhance(0.45)
-        img = img.filter(ImageFilter.GaussianBlur(radius=1.5))
-    else:
-        img = Image.new("RGB", (THUMB_WIDTH, THUMB_HEIGHT), (10, 12, 28))
+        darkened = ImageEnhance.Brightness(bg_img).enhance(0.7)
+        img.paste(darkened, (0, 0))
 
     draw = ImageDraw.Draw(img)
-    draw.rectangle([(45, 70), (59, THUMB_HEIGHT - 70)], fill=(*accent, 255))
 
-    lines = textwrap.wrap(text.upper(), width=13)[:3]
-    font_large = _load_font(100)
-    font_small = _load_font(44)
+    # split text
+    words = text.upper().split()
+    mid = len(words) // 2
+    left_text = " ".join(words[:mid]) if mid > 0 else words[0]
+    right_text = " ".join(words[mid:]) if mid < len(words) else ""
 
-    y = 100
-    for line in lines:
-        y = _draw_text_with_shadow(draw, line, (80, y), font_large) + 18
+    full = text.upper()
+    if "?" in full and full.count("?") == 1:
+        parts = full.split("?")
+        left_text = parts[0].strip() + "?"
+        right_text = parts[1].strip() if parts[1].strip() else right_text
+    elif ":" in full:
+        parts = full.split(":", 1)
+        left_text = parts[0].strip()
+        right_text = parts[1].strip()
 
-    bar_height = 80
-    draw.rectangle([(0, THUMB_HEIGHT - bar_height), (THUMB_WIDTH, THUMB_HEIGHT)], fill=(*accent, 210))
-    draw.text((45, THUMB_HEIGHT - bar_height + 22), f"🐋 {channel.name.upper()}", font=font_small, fill=(255, 255, 255))
+    # left red panel
+    left_overlay = Image.new("RGBA", (THUMB_WIDTH // 3, THUMB_HEIGHT), (180, 20, 20, 180))
+    img.paste(Image.new("RGB", (THUMB_WIDTH // 3, THUMB_HEIGHT), (180, 20, 20)),
+              (0, 0), mask=left_overlay.split()[3])
+    draw.polygon([(60, 80), (160, 80), (110, 160)], fill=(255, 50, 50))
+
+    # right green panel
+    right_overlay = Image.new("RGBA", (THUMB_WIDTH // 3, THUMB_HEIGHT), (20, 160, 70, 180))
+    img.paste(Image.new("RGB", (THUMB_WIDTH // 3, THUMB_HEIGHT), (20, 160, 70)),
+              (THUMB_WIDTH * 2 // 3, 0), mask=right_overlay.split()[3])
+    draw.polygon([
+        (THUMB_WIDTH * 2 // 3 + 60, 160),
+        (THUMB_WIDTH * 2 // 3 + 160, 160),
+        (THUMB_WIDTH * 2 // 3 + 110, 80)
+    ], fill=(50, 255, 100))
+
+    max_chars = max(len(left_text), len(right_text)) if right_text else len(left_text)
+    if max_chars <= 5:
+        font_size = 150
+    elif max_chars <= 8:
+        font_size = 125
+    elif max_chars <= 12:
+        font_size = 100
+    else:
+        font_size = 80
+
+    font_large = _load_font(font_size)
+
+    def draw_panel_text(panel_text: str, panel_x: int, panel_w: int):
+        lines = textwrap.wrap(panel_text, width=8)[:2]
+        total_h = len(lines) * (font_size + 15)
+        start_y = (THUMB_HEIGHT - total_h) // 2
+        for i, line in enumerate(lines):
+            bbox = draw.textbbox((0, 0), line, font=font_large)
+            text_w = bbox[2] - bbox[0]
+            x = panel_x + (panel_w - text_w) // 2
+            y = start_y + i * (font_size + 15)
+            for dx in range(-5, 6, 2):
+                for dy in range(-5, 6, 2):
+                    draw.text((x + dx, y + dy), line, font=font_large, fill=(0, 0, 0))
+            draw.text((x, y), line, font=font_large, fill=(255, 255, 255))
+
+    draw_panel_text(left_text, 0, THUMB_WIDTH // 3)
+    if right_text:
+        draw_panel_text(right_text, THUMB_WIDTH * 2 // 3, THUMB_WIDTH // 3)
+
+    # divider lines
+    draw.rectangle([(THUMB_WIDTH // 3 - 2, 0), (THUMB_WIDTH // 3 + 2, THUMB_HEIGHT)], fill=(255, 255, 255, 60))
+    draw.rectangle([(THUMB_WIDTH * 2 // 3 - 2, 0), (THUMB_WIDTH * 2 // 3 + 2, THUMB_HEIGHT)], fill=(255, 255, 255, 60))
 
     try:
         if os.path.exists(bg_path):
@@ -201,8 +265,8 @@ def generate_finance_thumbnail(
         pass
 
     os.makedirs(Path(output_path).parent, exist_ok=True)
-    img.save(output_path, "JPEG", quality=95)
-    print(f"  [thumb] Finance thumbnail saved: {Path(output_path).name}")
+    img.save(output_path, "JPEG", quality=97)
+    print(f"  [thumb] Finance thumbnail saved (Pillow): {Path(output_path).name}")
     return output_path
 
 
@@ -244,7 +308,8 @@ def generate_food_thumbnail(
     lines = textwrap.wrap(text.upper(), width=12)[:2]
     y = 40
     for line in lines:
-        y = _draw_text_with_shadow(draw, line, (45, y), font_large, fill=(255, 255, 255), shadow_color=(*accent, 255), shadow_offset=3) + 12
+        y = _draw_text_with_shadow(draw, line, (45, y), font_large,
+                                    fill=(255, 255, 255), shadow_color=(*accent, 255), shadow_offset=3) + 12
 
     draw.rectangle([(0, THUMB_HEIGHT - 75), (THUMB_WIDTH, THUMB_HEIGHT)], fill=(*accent, 230))
     draw.text((45, THUMB_HEIGHT - 57), channel.name, font=font_small, fill=(255, 255, 255))
@@ -298,7 +363,8 @@ def generate_dark_history_thumbnail(
     lines = textwrap.wrap(text.upper(), width=13)[:3]
     y = 90
     for line in lines:
-        y = _draw_text_with_shadow(draw, line, (80, y), font_large, fill=(255, 255, 255), shadow_color=(*accent, 255), shadow_offset=4) + 16
+        y = _draw_text_with_shadow(draw, line, (80, y), font_large,
+                                    fill=(255, 255, 255), shadow_color=(*accent, 255), shadow_offset=4) + 16
 
     draw.rectangle([(0, THUMB_HEIGHT - 75), (THUMB_WIDTH, THUMB_HEIGHT)], fill=(*accent, 240))
     draw.text((45, THUMB_HEIGHT - 57), "💀 CHUCKY'S UNTOLD STORIES", font=font_small, fill=(255, 255, 255))
@@ -315,7 +381,7 @@ def generate_dark_history_thumbnail(
     return output_path
 
 
-# ── Horror Fiction thumbnail (Chucky's Untold Stories style) ───────────────────
+# ── Horror Fiction thumbnail ───────────────────────────────────────────────────
 
 def generate_horror_fiction_thumbnail(
     channel: ChannelConfig,
@@ -326,24 +392,14 @@ def generate_horror_fiction_thumbnail(
     **kwargs,
 ) -> str:
     """
-    Matches the Chucky's Untold Stories visual style exactly:
-    - Pure cinematic AI art — NO text overlay
-    - Creepy porcelain doll as centerpiece
-    - Victorian/abandoned interior, single candle or moonlight
-    - Deep sepia/black palette with amber candlelight
-    - Heavy vignette, film grain, desaturated horror grading
-    - Only a small subtle watermark in the corner
-    Uses HD DALL-E 3 for maximum quality.
+    Horror fiction thumbnail — cinematic doll style matching Chucky's Untold Stories.
+    Pure AI art, no text overlay, only small watermark.
+    6 rotating scene compositions for visual variety.
     """
-    bg_path = output_path.replace(".jpg", "_bg.jpg")
-
-    # build story-specific scene from title and hook
-    scene_context = bg_query or "Victorian room rocking chair"
-    hook_excerpt = story_hook[:150] if story_hook else text
-
     import random
+    bg_path = output_path.replace(".jpg", "_bg.jpg")
+    scene_context = bg_query or "Victorian room rocking chair"
 
-    # randomize scene type for visual variety across videos
     scenes = [
         f"Extreme close-up of a weathered porcelain doll face, cracked pale skin, glass eyes reflecting a single candle flame, dark Victorian room background, story: {text}",
         f"Wide cinematic shot of a small porcelain doll sitting alone in an abandoned Victorian room, moonlight through broken window, long shadows, dusty floor, story: {text}",
@@ -366,15 +422,13 @@ def generate_horror_fiction_thumbnail(
     bg_img = _get_background(dalle_prompt, "creepy doll Victorian dark room candle", bg_path, quality="high")
 
     if bg_img:
-        # apply cinematic horror grading
         img = _apply_horror_grading(bg_img)
     else:
-        # fallback: pure black with subtle red gradient
         img = Image.new("RGB", (THUMB_WIDTH, THUMB_HEIGHT), (8, 0, 0))
 
     draw = ImageDraw.Draw(img)
 
-    # subtle watermark only — bottom right, semi-transparent
+    # subtle watermark only
     font_small = _load_font(26)
     watermark = "💀 Chucky's Untold Stories"
     bbox = draw.textbbox((0, 0), watermark, font=font_small)
@@ -382,8 +436,6 @@ def generate_horror_fiction_thumbnail(
     h = bbox[3] - bbox[1]
     x = THUMB_WIDTH - w - 15
     y = THUMB_HEIGHT - h - 15
-
-    # dark pill background for watermark
     padding = 5
     draw.rectangle([x - padding, y - padding, x + w + padding, y + h + padding], fill=(0, 0, 0, 140))
     draw.text((x, y), watermark, font=font_small, fill=(160, 160, 160))
@@ -408,6 +460,7 @@ def generate_thumbnail(
     output_path: str,
     bg_query: Optional[str] = None,
     story_hook: str = "",
+    **kwargs,
 ) -> str:
     """Route to the correct thumbnail style for the channel."""
     if channel.thumbnail_style == "food":
@@ -417,7 +470,7 @@ def generate_thumbnail(
     elif channel.thumbnail_style == "horror_fiction":
         return generate_horror_fiction_thumbnail(channel, thumbnail_text, output_path, bg_query, story_hook)
     else:
-        return generate_finance_thumbnail(channel, thumbnail_text, output_path, bg_query)
+        return generate_finance_thumbnail(channel, thumbnail_text, output_path, bg_query, **kwargs)
 
 
 if __name__ == "__main__":
@@ -425,16 +478,11 @@ if __name__ == "__main__":
     load_dotenv()
     from config import CHANNEL_A, CHANNEL_B
 
-    # test finance
-    generate_thumbnail(CHANNEL_A, "EVERY DOLLAR GETS A JOB", "temp/thumb_finance_test.jpg", "budgeting money")
-    print("Finance thumbnail: temp/thumb_finance_test.jpg")
+    # test finance (VidIQ → Pillow fallback)
+    generate_thumbnail(CHANNEL_A, "AI RISK? BIG REWARD?", "temp/thumb_finance_test.jpg", "AI investing")
+    print("Finance: temp/thumb_finance_test.jpg")
 
     # test horror
-    generate_thumbnail(
-        CHANNEL_B,
-        "The Doll That Blinks When You Look Away",
-        "temp/thumb_horror_test.jpg",
-        "rocking chair dark Victorian room",
-        story_hook="On March 14th, 2019, at exactly 3:47 in the morning, I woke to find the doll sitting upright on my dresser.",
-    )
-    print("Horror thumbnail: temp/thumb_horror_test.jpg")
+    generate_thumbnail(CHANNEL_B, "The Cursed Doll", "temp/thumb_horror_test.jpg",
+                      story_hook="A doll that moves on its own.")
+    print("Horror: temp/thumb_horror_test.jpg")
