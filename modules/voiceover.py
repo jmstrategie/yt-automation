@@ -136,10 +136,16 @@ def generate_voiceover(
     clean_text = re.sub(r"\s+", " ", clean_text).strip()
 
     if channel.elevenlabs_voice_id and ELEVENLABS_API_KEY:
-        generate_voiceover_elevenlabs(clean_text, channel.elevenlabs_voice_id, mp3_path)
+        try:
+            generate_voiceover_elevenlabs(clean_text, channel.elevenlabs_voice_id, mp3_path)
+        except Exception as e:
+            if "quota_exceeded" in str(e) or "quota" in str(e).lower():
+                print(f"  [voice] ElevenLabs quota exceeded — falling back to edge-tts")
+                generate_voiceover_free(clean_text, channel.voice, mp3_path)
+            else:
+                raise
     else:
         generate_voiceover_free(clean_text, channel.voice, mp3_path)
-
     generate_srt(clean_text, mp3_path, srt_path)
 
     return mp3_path, srt_path
