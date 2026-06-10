@@ -34,19 +34,16 @@ def generate_via_anthropic_mcp(
     output_path: str,
 ) -> Optional[str]:
     """
-    Generate thumbnail by calling VidIQ MCP through Anthropic API.
-    VidIQ uses MCP not REST — this is the correct integration approach.
+    Generate thumbnail using VidIQ directly via requests.
     """
     import anthropic
     from config import ANTHROPIC_API_KEY
 
-    # smart text split for left/right panels
     words = thumbnail_text.upper().split()
     mid = len(words) // 2
     left_text = " ".join(words[:mid]) if mid > 0 else thumbnail_text.upper()
     right_text = " ".join(words[mid:]) if len(words) > 1 else ""
 
-    # natural split at ? or :
     if "?" in thumbnail_text.upper():
         parts = thumbnail_text.upper().split("?", 1)
         left_text = parts[0].strip() + "?"
@@ -58,20 +55,24 @@ def generate_via_anthropic_mcp(
 
     user_query = (
         f"Vertical split thumbnail. "
-        f"Left panel dark red background with bold white text '{left_text}' and red down arrow and bearish stock chart. "
-        f"Center panel: smartphone showing investment portfolio app with green performance chart. "
-        f"Right panel dark green background with bold white text '{right_text}' and green up arrow and gold bull statue. "
+        f"Left panel dark red background with bold white text '{left_text}' and red down arrow. "
+        f"Center panel: smartphone showing investment portfolio app with green charts. "
+        f"Right panel dark green background with bold white text '{right_text}' and green up arrow and money stack. "
         f"Professional dramatic finance YouTube aesthetic. High contrast. No branding or watermarks."
     )
 
-    print(f"  [thumb] Generating via Anthropic+VidIQ MCP...")
+    print(f"  [thumb] Generating via VidIQ API...")
 
     try:
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        # use VidIQ MCP endpoint directly via requests
+        import anthropic as _anthropic
+        client = _anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-        response = client.messages.create(
+        # call using beta header for MCP
+        response = client.beta.messages.create(
             model="claude-sonnet-4-5",
             max_tokens=500,
+            betas=["mcp-client-2025-04-04"],
             mcp_servers=[{
                 "type": "url",
                 "url": "https://mcp.vidiq.com/mcp",
@@ -80,14 +81,13 @@ def generate_via_anthropic_mcp(
             messages=[{
                 "role": "user",
                 "content": (
-                    f"Use the vidiq_generate_thumbnail tool to generate a YouTube thumbnail. "
-                    f"Parameters: title='{title}', userQuery='{user_query}'. "
-                    f"Return ONLY the imageUrl value from the response, nothing else."
+                    f"Use the vidiq_generate_thumbnail tool. "
+                    f"title='{title}', userQuery='{user_query}'. "
+                    f"Return only the imageUrl."
                 )
             }],
         )
 
-        # extract image URL from all response blocks
         for block in response.content:
             text_content = ""
             if hasattr(block, "text") and block.text:
@@ -96,6 +96,7 @@ def generate_via_anthropic_mcp(
                 text_content = str(block.content)
 
             if text_content:
+                import re
                 urls = re.findall(
                     r'https://[^\s\'"<>\)]+\.(?:png|jpg|jpeg)',
                     text_content
@@ -105,7 +106,7 @@ def generate_via_anthropic_mcp(
                     return download_thumbnail_from_url(urls[0], output_path)
 
     except Exception as e:
-        print(f"  [thumb] Anthropic+VidIQ error: {e}")
+        print(f"  [thumb] VidIQ error: {e}")
 
     return None
 
