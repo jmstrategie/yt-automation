@@ -1,0 +1,35 @@
+name: Weekly Keyword Audit
+
+on:
+  schedule:
+    - cron: "0 10 * * 0"   # Every Sunday 10am UTC
+  workflow_dispatch: {}
+
+jobs:
+  audit-and-update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Python packages
+        run: pip install python-dotenv
+
+      - name: Run weekly audit
+        run: python3 weekly_audit.py
+
+      - name: Commit and push keyword updates
+        run: |
+          git config --global user.name "yt-automation-bot"
+          git config --global user.email "bot@yt-automation.local"
+          git add modules/trends.py output/weekly_audit_log.json
+          git diff --staged --quiet || git commit -m "Weekly keyword audit update - $(date +%Y-%m-%d)"
+          git push origin main

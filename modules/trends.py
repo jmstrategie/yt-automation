@@ -224,7 +224,7 @@ def load_topic_history(channel: ChannelConfig) -> List[str]:
     try:
         if os.path.exists(history_file):
             with open(history_file) as f:
-                return json.load(f)[-20:]
+                return json.load(f)[-40:]
     except Exception:
         pass
     return []
@@ -242,6 +242,24 @@ def save_topic_history(channel: ChannelConfig, topic_title: str) -> None:
     except Exception as e:
         print(f"  [trends] Could not save topic history: {e}")
 
+def _is_similar_topic(new_title: str, existing_titles: list, threshold: float = 0.5) -> bool:
+    """
+    Check if a new title is too similar to any existing title using word overlap.
+    Catches near-duplicates like '7 Cursed Dolls That Destroyed Their Owners Forever'
+    vs '7 Cursed Dolls That Destroyed Their Owners'.
+    """
+    new_words = set(w.lower() for w in new_title.split() if len(w) > 3)
+    if not new_words:
+        return False
+
+    for existing in existing_titles:
+        existing_words = set(w.lower() for w in existing.split() if len(w) > 3)
+        if not existing_words:
+            continue
+        overlap = len(new_words & existing_words) / len(new_words | existing_words)
+        if overlap >= threshold:
+            return True
+    return False
 
 def get_topics_for_channel(channel: ChannelConfig, n: int = 5) -> List[Dict]:
     """Full pipeline: RSS + Autocomplete + Trends → Claude ranking."""
@@ -261,13 +279,22 @@ def get_topics_for_channel(channel: ChannelConfig, n: int = 5) -> List[Dict]:
         print(f"  Avoiding {len(recent_topics)} recent topics")
 
     topics = rank_topics_with_claude(
-        channel, headlines,
-        trending + autocomplete,
-        autocomplete,
-        n=n,
-        recent_topics=recent_topics,
+        channel, headlines, trending, autocomplete, n=n, recent_topics=recent_topics
     )
 
+    # filter out near-duplicates that slipped past Claude
+    filtered_topics = []
+    for t in topics:
+        if not _is_similar_topic(t["title"], recent_topics):
+            filtered_topics.append(t)
+        else:
+            print(f"  [trends] Filtered duplicate: '{t['title']}'")
+
+    if not filtered_topics:
+        print("  [trends] All topics were duplicates — keeping original list as fallback")
+        filtered_topics = topics
+
+    topics = filtered_topics
     print(f"  Claude selected {len(topics)} topics:")
     for i, t in enumerate(topics):
         kw = t.get("target_keyword", "")
@@ -278,7 +305,6 @@ def get_topics_for_channel(channel: ChannelConfig, n: int = 5) -> List[Dict]:
         save_topic_history(channel, topics[0]["title"])
 
     return topics
-
 
 if __name__ == "__main__":
     from dotenv import load_dotenv
