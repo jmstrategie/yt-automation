@@ -33,11 +33,14 @@ def generate_via_anthropic_mcp(
     thumbnail_text: str,
     output_path: str,
 ) -> Optional[str]:
-    """
-    Generate thumbnail using VidIQ directly via requests.
-    """
+    """Generate thumbnail via VidIQ MCP API with Bearer token."""
     import anthropic
     from config import ANTHROPIC_API_KEY
+
+    vidiq_api_key = os.environ.get("VIDIQ_API_KEY", "")
+    if not vidiq_api_key:
+        print("  [thumb] No VIDIQ_API_KEY found")
+        return None
 
     words = thumbnail_text.upper().split()
     mid = len(words) // 2
@@ -55,20 +58,17 @@ def generate_via_anthropic_mcp(
 
     user_query = (
         f"Vertical split thumbnail. "
-        f"Left panel dark red background with bold white text '{left_text}' and red down arrow. "
-        f"Center panel: smartphone showing investment portfolio app with green charts. "
-        f"Right panel dark green background with bold white text '{right_text}' and green up arrow and money stack. "
-        f"Professional dramatic finance YouTube aesthetic. High contrast. No branding or watermarks."
+        f"Left panel dark red with bold white text '{left_text}' and red down arrow. "
+        f"Center: smartphone with investment portfolio app and green charts. "
+        f"Right panel dark green with bold white text '{right_text}' and green up arrow and money stack. "
+        f"Professional dramatic finance YouTube aesthetic. No branding."
     )
 
     print(f"  [thumb] Generating via VidIQ API...")
 
     try:
-        # use VidIQ MCP endpoint directly via requests
-        import anthropic as _anthropic
-        client = _anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-        # call using beta header for MCP
         response = client.beta.messages.create(
             model="claude-sonnet-4-5",
             max_tokens=500,
@@ -77,6 +77,7 @@ def generate_via_anthropic_mcp(
                 "type": "url",
                 "url": "https://mcp.vidiq.com/mcp",
                 "name": "vidiq",
+                "authorization_token": vidiq_api_key,
             }],
             messages=[{
                 "role": "user",
@@ -94,13 +95,9 @@ def generate_via_anthropic_mcp(
                 text_content = block.text
             elif hasattr(block, "content"):
                 text_content = str(block.content)
-
             if text_content:
                 import re
-                urls = re.findall(
-                    r'https://[^\s\'"<>\)]+\.(?:png|jpg|jpeg)',
-                    text_content
-                )
+                urls = re.findall(r'https://[^\s\'"<>\)]+\.(?:png|jpg|jpeg)', text_content)
                 if urls:
                     print(f"  [thumb] VidIQ image URL found")
                     return download_thumbnail_from_url(urls[0], output_path)
