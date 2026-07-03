@@ -24,12 +24,17 @@ jobs:
         run: pip install python-dotenv
 
       - name: Run weekly audit
-        run: python3 weekly_audit.py
+        run: |
+          python3 weekly_audit.py || exit 1
 
       - name: Commit and push keyword updates
         run: |
           git config --global user.name "yt-automation-bot"
           git config --global user.email "bot@yt-automation.local"
           git add modules/trends.py output/weekly_audit_log.json
-          git diff --staged --quiet || git commit -m "Weekly keyword audit update - $(date +%Y-%m-%d)"
-          git push origin main
+          if git diff --staged --quiet; then
+            echo "No keyword changes to commit"
+            exit 0
+          fi
+          git commit -m "Weekly keyword audit update - $(date +%Y-%m-%d)"
+          git push origin main || exit 1
