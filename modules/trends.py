@@ -21,19 +21,18 @@ from config import ChannelConfig, ANTHROPIC_API_KEY, CLAUDE_MODEL
 # Updated: May 2026 — sweet spot: volume >50K, competition <45
 VIDIQ_KEYWORDS = {
     "personal_finance_ai": [
-        # keyword, monthly_searches, competition_score
-        ("budgeting for beginners", 128093, 31),
-        ("budgeting", 190340, 36),
-        ("saving money", 192675, 38),
-        ("zero based budgeting", 28368, 26),
-        ("frugal living", 113206, 41),
-        ("how to save money", 254477, 48),
-        ("budgeting tips", 39279, 41),
-        ("personal finance tips", 218128, 46),
-        ("ai personal finance", 13090, 32),
-        ("chatgpt for finance", 5289, 20),
-        ("how to make a budget", 22465, 24),
-        ("money saving tips", 69409, 51),
+        ("budgeting", 183312, 20),
+        ("budgeting for beginners", 142756, 34),
+        ("personal finance apps", 12531, 17),
+        ("best money management apps", 4606, 15),
+        ("budgeting apps for beginners", 5056, 26),
+        ("monarch money review", 38804, 29),
+        ("how to budget", 50361, 49),
+        ("personal finance", 1516126, 53),
+        ("save money", 105667, 48),
+        ("rocket money", 19673, 38),
+        ("copilot money review", 3302, 30),
+        ("best budgeting app", 16306, 35),
     ],
     "dark_history": [
         ("dark history", 50000, 35),
