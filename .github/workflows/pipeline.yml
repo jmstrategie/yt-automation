@@ -1,6 +1,6 @@
 name: YouTube Automation Pipeline
 
-oon:
+on:
    schedule:
      - cron: "0 14 * * 1,3,5"
      - cron: "0 16 * * 2,4,6"
