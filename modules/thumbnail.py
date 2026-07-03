@@ -160,16 +160,16 @@ def generate_finance_thumbnail(
     VidIQ produces professional quality matching top performers.
     Pillow fallback: vertical split red/center/green with bold text.
     """
-    # ── Try VidIQ first ────────────────────────────────────────────────────────
-    try:
-        from modules.thumbnail_vidiq import generate_via_anthropic_mcp
-        title = kwargs.get("title", text)
-        result = generate_via_anthropic_mcp(title, text, output_path)
-        if result:
-            return result
-        print("  [thumb] VidIQ failed — using Pillow fallback")
-    except Exception as e:
-        print(f"  [thumb] VidIQ unavailable: {e} — using Pillow")
+    # ── VidIQ thumbnail disabled — using manual VidIQ web interface instead ───
+    # try:
+    #     from modules.thumbnail_vidiq import generate_via_anthropic_mcp
+    #     title = kwargs.get("title", text)
+    #     result = generate_via_anthropic_mcp(title, text, output_path)
+    #     if result:
+    #         return result
+    #     print("  [thumb] VidIQ failed — using Pillow fallback")
+    # except Exception as e:
+    #     print(f"  [thumb] VidIQ unavailable: {e} — using Pillow")
 
     # ── Pillow fallback: vertical split ───────────────────────────────────────
     accent = _hex_to_rgb(channel.primary_color)
