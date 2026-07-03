@@ -31,7 +31,8 @@ jobs:
         run: |
           git config --global user.name "yt-automation-bot"
           git config --global user.email "bot@yt-automation.local"
-          git add modules/trends.py output/weekly_audit_log.json
+          git add modules/trends.py
+          git add -f output/weekly_audit_log.json
           if git diff --staged --quiet; then
             echo "No keyword changes to commit"
             exit 0
