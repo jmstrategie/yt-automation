@@ -1,12 +1,5 @@
 [
   {
-    "date": "2026-08-02T11:10:18.908273",
-    "finance_keywords_count": 12,
-    "horror_keywords_count": 10,
-    "top_finance_opportunity": "best money management apps",
-    "top_horror_opportunity": "cursed doll"
-  },
-  {
     "date": "2026-08-09T10:22:09.604353",
     "finance_keywords_count": 12,
     "horror_keywords_count": 10,
@@ -78,6 +71,13 @@
   },
   {
     "date": "2026-10-18T13:40:01.846414",
+    "finance_keywords_count": 12,
+    "horror_keywords_count": 10,
+    "top_finance_opportunity": "best money management apps",
+    "top_horror_opportunity": "cursed doll"
+  },
+  {
+    "date": "2026-10-25T14:00:18.207597",
     "finance_keywords_count": 12,
     "horror_keywords_count": 10,
     "top_finance_opportunity": "best money management apps",
